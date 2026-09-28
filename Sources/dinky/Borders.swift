@@ -39,11 +39,11 @@ final class BorderManager {
             refocus()
             syncAll()
             return
-        case .frontApp:
+        case .frontApp, .windowReorder:
             refocus()
-            // The new app's front window can settle a few ms after the app (JankyBorders waits 20 ms).
+            // The front window can settle after the notification, including a click between windows of one app.
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20)) { [weak self] in self?.refocus() }
-        case .windowReorder, .windowCreate, .windowDestroy, .windowUpdate, .windowTitle:
+        case .windowCreate, .windowDestroy, .windowUpdate, .windowTitle:
             refocus()
         default:
             break
