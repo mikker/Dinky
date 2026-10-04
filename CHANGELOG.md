@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- dinky uses less CPU while idle: the menu bar title is only set when it changes.
+
 ## 0.26
 
 ### Key bindings
