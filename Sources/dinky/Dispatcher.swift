@@ -144,7 +144,7 @@ enum Dispatcher {
     }
 
     /// Puts workspace `n` on screen on its display and gives that display focus. `landed` runs once it shows, in
-    /// place of focusing the display's front window.
+    /// place of focusing the workspace's window.
     private static func show(_ n: Int, landed: (() -> Void)? = nil) -> Reply {
         let model = AppState.shared.displays
         guard let space = AppState.shared.numbers.space(of: n), let display = model.display(containingSpace: space) else {
@@ -154,13 +154,16 @@ enum Dispatcher {
         let showing = display.currentSpaceID == space && targetSpaceID(on: display) == space
         let elsewhere = model.focusedDisplay()?.uuid != display.uuid
         if showing, !elsewhere, landed == nil { return .ok("already on workspace \(n)") }
-        let arrive = landed ?? (elsewhere ? {
+        // Arriving on a Space, macOS activates an app, which can be one with a window on another display when the
+        // workspace has no window of the app that had focus. Focus stays on this display.
+        let arrive = landed ?? {
             model.reconcile()
             guard let shown = model.displays.first(where: { $0.uuid == display.uuid }) else { return }
+            if !elsewhere, model.display(ofWindow: frontWindowID())?.uuid == shown.uuid { return }
             _ = focus(shown, window: AppState.shared.coordinator?.workspace(on: shown)?.focused)
-        } : nil)
+        }
         if showing {
-            arrive?()
+            arrive()
             return .ok("workspace \(n)")
         }
         guard switchSpace(toSpaceID: space, on: display, landed: arrive) else { return .error("switch to workspace \(n) failed") }

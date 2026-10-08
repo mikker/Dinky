@@ -73,3 +73,23 @@ func focusWindow(pid: pid_t, id: UInt32) {
     }
     NSRunningApplication(processIdentifier: pid)?.activate()
 }
+
+/// Takes the keyboard off a window on another display when `display` has no window to focus, by activating
+/// Finder, as macOS does on an empty Space. When displays have separate Spaces, macOS can instead activate an
+/// app whose window is on another display. Left alone when activating Finder would bring one of its windows
+/// forward: one on screen, or one anywhere when macOS switches to a Space with the app's windows.
+func focusDesktop(of display: Display) {
+    let front = frontWindowID()
+    guard front != 0, AppState.shared.displays.display(ofWindow: front)?.uuid != display.uuid,
+          let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first else { return }
+    let swoosh = dockSetting("workspaces-auto-swoosh") ?? true
+    guard normalWindows(of: finder.processIdentifier, swoosh ? [.optionAll] : [.optionOnScreenOnly]).isEmpty else {
+        print("\(stamp()) focus: left the keyboard on window \(front), activating Finder would show its window")
+        fflush(stdout)
+        return
+    }
+    print("\(stamp()) focus: activated Finder to take the keyboard off window \(front) on another display")
+    fflush(stdout)
+    noteOwnSwitch(to: display.currentSpaceID, on: display.uuid)
+    finder.activate()
+}

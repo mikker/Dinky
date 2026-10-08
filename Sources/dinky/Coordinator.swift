@@ -245,7 +245,8 @@ final class Coordinator {
         let id = focusedWindow
         if id != lastFocused {
             lastFocused = id
-            displays.focusOverride = nil
+            // Only a window takes focus from a display focused without one, not an app with no window here.
+            if id != 0 { displays.focusOverride = nil }
             onFocusChange?()
         }
         if let focusing, focusing.id != id, Date() < focusing.until { return }

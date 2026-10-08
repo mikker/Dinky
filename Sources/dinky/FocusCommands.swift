@@ -65,9 +65,11 @@ extension Dispatcher {
         focus(display, window: AppState.shared.coordinator?.workspace(on: display)?.edgeWindow(direction.opposite))
     }
 
-    /// Focuses `window`, or, with none, makes `display` the focused one until focus next changes.
+    /// Focuses `window`, or, with none, makes `display` the focused one until a window takes focus, and takes the
+    /// keyboard off any window on another display.
     static func focus(_ display: Display, window: WindowID?) -> Reply {
         if let window { return focus(window: window) }
+        focusDesktop(of: display)
         let model = AppState.shared.displays
         model.focusOverride = display.uuid
         return .ok("focused display \((model.displays.firstIndex(of: display) ?? 0) + 1)")

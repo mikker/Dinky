@@ -153,7 +153,7 @@ private func hasWindowOnScreen(_ pid: pid_t) -> Bool {
 
 // Only the windows the window model tracks as normal count, so an app's hidden helper windows, which can sit
 // on any Space, don't. The window server's list supplies the front-to-back order.
-private func normalWindows(of pid: pid_t, _ options: CGWindowListOption) -> [UInt32] {
+func normalWindows(of pid: pid_t, _ options: CGWindowListOption) -> [UInt32] {
     let known = AppState.shared.coordinator?.model.windows ?? [:]
     let info = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
     return info.compactMap { w in
