@@ -6,6 +6,10 @@
 
 - New windows open on the focused display. Before, the app chose: Ghostty reopened where its last window closed, and Finder opened next to the window that had focus before a switch to an empty workspace. Windows a `[[rules]]` entry runs commands for are left to the rule.
 
+### Fixes
+
+- Arriving on an empty workspace activates Finder, as macOS does with the desktop shown. Before, with Finder's desktop turned off (`CreateDesktop = false`), the app that had focus stayed active with its window on another workspace, so typing and new windows went to it.
+
 ## 0.14
 
 ### Install

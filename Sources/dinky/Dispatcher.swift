@@ -154,12 +154,12 @@ enum Dispatcher {
         let showing = display.currentSpaceID == space && targetSpaceID(on: display) == space
         let elsewhere = model.focusedDisplay()?.uuid != display.uuid
         if showing, !elsewhere, landed == nil { return .ok("already on workspace \(n)") }
-        // Arriving on a Space, macOS activates an app, which can be one with a window on another display when the
-        // workspace has no window of the app that had focus. Focus stays on this display.
+        // Arriving on a Space, macOS activates an app, which can be one whose window is on another Space when the
+        // workspace has no window of the app that had focus. Focus moves to this Space.
         let arrive = landed ?? {
             model.reconcile()
             guard let shown = model.displays.first(where: { $0.uuid == display.uuid }) else { return }
-            if !elsewhere, model.display(ofWindow: frontWindowID())?.uuid == shown.uuid { return }
+            if !elsewhere, dinky_window_space_id(frontWindowID()) == shown.currentSpaceID { return }
             _ = focus(shown, window: AppState.shared.coordinator?.workspace(on: shown)?.focused)
         }
         if showing {

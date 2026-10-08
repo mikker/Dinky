@@ -74,21 +74,22 @@ func focusWindow(pid: pid_t, id: UInt32) {
     NSRunningApplication(processIdentifier: pid)?.activate()
 }
 
-/// Takes the keyboard off a window on another display when `display` has no window to focus, by activating
-/// Finder, as macOS does on an empty Space. When displays have separate Spaces, macOS can instead activate an
-/// app whose window is on another display. Left alone when activating Finder would bring one of its windows
-/// forward: one on screen, or one anywhere when macOS switches to a Space with the app's windows.
+/// Activates Finder when `display` has no window to focus, as macOS does on an empty Space with the desktop shown.
+/// Without the desktop, or with separate Spaces per display, macOS can leave active an app whose window is on another
+/// Space. Left alone when activating Finder would bring one of its windows forward: one on screen, or one anywhere
+/// when macOS switches to a Space with the app's windows.
 func focusDesktop(of display: Display) {
-    let front = frontWindowID()
-    guard front != 0, AppState.shared.displays.display(ofWindow: front)?.uuid != display.uuid,
-          let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first else { return }
+    guard let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first,
+          let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != finder.processIdentifier,
+          dinky_window_space_id(frontWindowID()) != display.currentSpaceID else { return }
+    let app = front.localizedName ?? "the front app"
     let swoosh = dockSetting("workspaces-auto-swoosh") ?? true
     guard normalWindows(of: finder.processIdentifier, swoosh ? [.optionAll] : [.optionOnScreenOnly]).isEmpty else {
-        print("\(stamp()) focus: left the keyboard on window \(front), activating Finder would show its window")
+        print("\(stamp()) focus: left the keyboard with \(app), activating Finder would show its window")
         fflush(stdout)
         return
     }
-    print("\(stamp()) focus: activated Finder to take the keyboard off window \(front) on another display")
+    print("\(stamp()) focus: activated Finder in place of \(app), which has no window here")
     fflush(stdout)
     noteOwnSwitch(to: display.currentSpaceID, on: display.uuid)
     finder.activate()

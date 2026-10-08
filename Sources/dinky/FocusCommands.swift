@@ -66,7 +66,7 @@ extension Dispatcher {
     }
 
     /// Focuses `window`, or, with none, makes `display` the focused one until a window takes focus, and takes the
-    /// keyboard off any window on another display.
+    /// keyboard off any window on another Space.
     static func focus(_ display: Display, window: WindowID?) -> Reply {
         if let window { return focus(window: window) }
         focusDesktop(of: display)
