@@ -45,6 +45,8 @@ struct WindowEvent {
 // Main thread only: SkyLight's callbacks are hopped to the main queue before they touch it.
 final class WindowModel {
     private(set) var windows: [UInt32: Window] = [:]
+    /// When the table was seeded. Windows first seen after it were created while dinky ran.
+    private(set) var seededAt = Date.distantFuture
     private var observers: [(WindowEvent) -> Void] = []
 
     private let ownPID = getpid()
@@ -79,6 +81,7 @@ final class WindowModel {
 
     private func seed() {
         let now = Date()
+        seededAt = now
         for id in dinky_all_window_ids().map(\.uint32Value) {
             if let window = makeWindow(id, spaceID: 0, firstSeen: now) { windows[id] = window }
         }

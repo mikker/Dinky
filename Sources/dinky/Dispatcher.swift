@@ -241,6 +241,15 @@ enum Dispatcher {
         return .ok("moved window \(wid) to display \(n + 1)")
     }
 
+    /// Moves a new window to the current Space of `display`, without telling the coordinator, which is holding it
+    /// out of the trees. Nil once moved, else the error.
+    static func adopt(_ wid: WindowID, onto display: Display) -> Reply? {
+        let from = AppState.shared.displays.display(ofWindow: wid)
+        if let error = move(wid, to: display.currentSpaceID, arriving: "display \(display.id)") { return error }
+        if let from { keepOffset(of: wid, from: from, to: display) }
+        return nil
+    }
+
     /// Moves a window to a Space on display `to` and tells the coordinator, which refocuses the Space left
     /// behind unless the caller follows the window. Nil once moved, else the reply to answer (an error, or ok
     /// when the window is already there).

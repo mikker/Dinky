@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Tiling
+
+- New windows open on the focused display. Before, the app chose: Ghostty reopened where its last window closed, and Finder opened next to the window that had focus before a switch to an empty workspace. Windows a `[[rules]]` entry runs commands for are left to the rule.
+
 ## 0.14
 
 ### Install

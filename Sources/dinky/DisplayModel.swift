@@ -97,11 +97,10 @@ final class DisplayModel {
         observers.append(handler)
     }
 
-    /// The display chosen by `focus-monitor`, else that of the focused window, else the one under the cursor,
-    /// else the main display.
-    func focusedDisplay() -> Display? {
+    /// The display chosen by `focus-monitor`, else that of the focused window (or `window`), else the one under
+    /// the cursor, else the main display.
+    func focusedDisplay(window wid: UInt32 = frontWindowID()) -> Display? {
         if let chosen = displays.first(where: { $0.uuid == focusOverride }) { return chosen }
-        let wid = frontWindowID()
         if wid != 0, let display = display(ofWindow: wid) { return display }
         if let cursor = CGEvent(source: nil)?.location, let display = displays.first(where: { $0.frame.contains(cursor) }) {
             return display

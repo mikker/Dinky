@@ -23,7 +23,7 @@ final class Coordinator {
         }
     }
 
-    private let displays: DisplayModel
+    let displays: DisplayModel
     private(set) var config: Config
     let applier = FrameApplier()
     private lazy var animator = Animator(applier: applier)
@@ -39,12 +39,18 @@ final class Coordinator {
     var heldTabs: [WindowID: WindowID] = [:]
     /// Newcomers held once and not confirmed as tabs. They are tiled like any window from then on.
     var notTabs: Set<WindowID> = []
+    /// New windows not yet classified, and the display that had focus when they first showed. See Adoption.swift.
+    var adoptTargets: [WindowID: String] = [:]
+    /// New windows on their way to the focused display, kept out of the trees until they arrive.
+    var adopting: Set<WindowID> = []
     /// The tiled window being dragged with the mouse, until the button is released. See Drag.swift.
     var dragging: WindowID?
     lazy var placeholders = DragPlaceholders()
     /// Called when the focused window changes.
     var onFocusChange: (() -> Void)?
-    private var lastFocused: WindowID = 0
+    private(set) var lastFocused: WindowID = 0
+    /// The focused display just before `lastFocused` took focus.
+    private(set) var displayBeforeFocus: String?
     /// A window dinky just focused, and until when focus reads that disagree are taken as stale.
     private var focusing: (id: WindowID, until: Date)?
     /// Trees to place without gliding the next time they are applied: after displays come or go, apps have
@@ -200,10 +206,14 @@ final class Coordinator {
     func track(_ window: Window) {
         if placements[window.id] == nil {
             // AX only lists windows on a Space that is on screen; the rest are classified when theirs is.
-            guard window.isNormal, isVisible(window.spaceID), let floating = classify(window) else { return }
-            placements[window.id] = Placement(floating: floating, space: nil)
+            guard window.isNormal, isVisible(window.spaceID) else { return }
+            // Once, on the first classification attempt, not again on its retries.
+            if attempts[window.id] == nil { noteFirstShowing(window) }
+            guard let classification = classify(window) else { return }
+            placements[window.id] = Placement(floating: classification.floating, space: nil)
+            if !classification.runsRules, adopt(window) { return }
         }
-        guard !placements[window.id]!.floating else { return }
+        guard !adopting.contains(window.id), !placements[window.id]!.floating else { return }
         let old = placements[window.id]!.space
         if let old, window.isMinimized || !window.isOrderedIn, takeOverTile(of: window.id, in: old) {
             placements[window.id]!.space = nil
@@ -220,6 +230,8 @@ final class Coordinator {
 
     private func forget(_ id: WindowID) {
         attempts[id] = nil
+        adoptTargets[id] = nil
+        adopting.remove(id)
         applier.forget(id)
         animator.forget(id)
         heldTabs[id] = nil
@@ -244,6 +256,8 @@ final class Coordinator {
     private func syncFocus() {
         let id = focusedWindow
         if id != lastFocused {
+            // Before the override goes: a new window can take focus before it shows. See Adoption.swift.
+            displayBeforeFocus = displays.focusedDisplay(window: lastFocused)?.uuid
             lastFocused = id
             // Only a window takes focus from a display focused without one, not an app with no window here.
             if id != 0 { displays.focusOverride = nil }
