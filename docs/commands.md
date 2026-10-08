@@ -53,6 +53,7 @@ and exits 1 on errors or when it isn't running. CLI-only commands:
 | `doctor [--config <path>]` | Check the config and macOS settings, and that no other tiling window manager is running. |
 | `recover` | Restore windows left tiled by a crash. |
 | `debug events\|windows` | Print window events or windows, without the app. |
+| `version`, `-v`, `--version` | Print the version and build number. |
 
 The log is `~/Library/Logs/dinky.log`; attach it to bug reports.
 

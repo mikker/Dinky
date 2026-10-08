@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Install
+
+- The Homebrew cask installs on macOS 15 or later, as the app supports. Before, it asked for a newer macOS.
+
+### Command line
+
+- `dinky -v` prints the version, like `dinky version` and `dinky --version`.
+
 ### Fixes
 
 - Switching to an empty workspace keeps focus on its display. Before, macOS could hand focus to a window on another display, so typing and the next `workspace next` went there. `focus-monitor` onto an empty display also takes the keyboard off the other display's window.
