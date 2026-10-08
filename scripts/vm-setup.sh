@@ -6,7 +6,7 @@ log() { echo "[$(date +%H:%M:%S)] $*"; }
 
 pkill -9 -f 'MacOS/tart run --no-graphics --no-clipboard dinky' 2>/dev/null; sleep 3
 tart delete dinky 2>&1; sleep 1
-tart clone tuna-golden-gate-base dinky || { log "clone failed"; exit 1; }
+tart clone ghcr.io/cirruslabs/macos-golden-gate-base:latest dinky || { log "clone failed"; exit 1; }
 log "cloned"
 nohup tart run --no-graphics --no-clipboard dinky > /tmp/dinky-vm.log 2>&1 &
 sleep 5
