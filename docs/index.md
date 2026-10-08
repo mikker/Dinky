@@ -35,7 +35,7 @@ Status: early, in daily use by its author on macOS 27. Expect rough edges.
 
 ## Requirements
 
-- macOS 27 on Apple silicon. Only 27.0 has been tried.
+- macOS 15 or later on Apple silicon. Developed and tested on macOS 27.
 - Accessibility permission. The first run asks.
 
 ## Install
