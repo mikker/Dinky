@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Visible document windows, such as Windows App remote sessions, tile even when macOS reports them as ordered out. Hidden apps, minimized windows and inactive tabs remain excluded from tiling.
+
 ## 0.15
 
 ### Tiling

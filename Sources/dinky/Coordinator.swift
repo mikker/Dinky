@@ -215,7 +215,7 @@ final class Coordinator {
         }
         guard !adopting.contains(window.id), !placements[window.id]!.floating else { return }
         let old = placements[window.id]!.space
-        if let old, window.isMinimized || !window.isOrderedIn, takeOverTile(of: window.id, in: old) {
+        if let old, window.isMinimized || !window.isShown, takeOverTile(of: window.id, in: old) {
             placements[window.id]!.space = nil
             return
         }
