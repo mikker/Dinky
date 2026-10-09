@@ -193,6 +193,10 @@ Every rule whose conditions all match a new window runs, in order. Dialogs,
 sheets, panels and fixed-size windows float without one, as do windows that
 can't go full screen while `float-windows-without-fullscreen` is on.
 
+New windows open on the focused display, whichever display the app picked. A
+rule that runs a command other than `layout` for a window, such as
+`move-window-to-workspace`, decides where it goes instead.
+
 <div class="wide-table" markdown="1">
 
 | Key | |
