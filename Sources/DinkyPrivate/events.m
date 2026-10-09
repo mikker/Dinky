@@ -1,6 +1,7 @@
 #import "events.h"
 #import "query.h"
 #import "skylight.h"
+#include <dlfcn.h>
 
 // Notify procs, as JankyBorders src/events.c registers them. Observed on 27.0: the handler gets
 // (type, data, length, context); JankyBorders' fourth parameter is the context it passed in.
@@ -10,8 +11,17 @@ extern CGError SLSRemoveNotifyProc(NotifyProc handler, uint32_t type, void *cont
 extern CGError SLSRequestNotificationsForWindows(int cid, const uint32_t *windowIDs, int count);
 extern CGError SLSGetWindowBounds(int cid, uint32_t wid, CGRect *frame);
 extern CGError SLSWindowIsOrderedIn(int cid, uint32_t wid, uint8_t *orderedIn);
-// macOS 26 and later. JankyBorders dlsyms it; weak import does the same.
-extern CFArrayRef SLSWindowIteratorGetCornerRadii(CFTypeRef iterator) __attribute__((weak_import));
+// macOS 26 and later. Resolve dynamically to avoid a hard link dependency on newer SDKs.
+typedef CFArrayRef (*WindowIteratorGetCornerRadiiFn)(CFTypeRef iterator);
+static WindowIteratorGetCornerRadiiFn window_iterator_get_corner_radii(void)
+{
+    static dispatch_once_t once;
+    static WindowIteratorGetCornerRadiiFn function;
+    dispatch_once(&once, ^{
+        function = (WindowIteratorGetCornerRadiiFn)dlsym(RTLD_DEFAULT, "SLSWindowIteratorGetCornerRadii");
+    });
+    return function;
+}
 
 static const DinkyEventKind kinds[] = {
     DinkyEventWindowUpdate, DinkyEventWindowClose, DinkyEventWindowMove, DinkyEventWindowResize,
@@ -120,8 +130,9 @@ DinkyWindowInfo dinky_window_info(uint32_t windowID)
         info.attributes = SLSWindowIteratorGetAttributes(iterator);
 
         // JankyBorders windows_window_create: first entry of the radii array, released after.
-        if (SLSWindowIteratorGetCornerRadii) {
-            CFArrayRef radii = SLSWindowIteratorGetCornerRadii(iterator);
+        WindowIteratorGetCornerRadiiFn getCornerRadii = window_iterator_get_corner_radii();
+        if (getCornerRadii) {
+            CFArrayRef radii = getCornerRadii(iterator);
             if (radii && CFArrayGetCount(radii) > 0) {
                 CFNumberGetValue(CFArrayGetValueAtIndex(radii, 0), kCFNumberIntType, &info.cornerRadius);
             }
