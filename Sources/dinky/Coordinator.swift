@@ -124,7 +124,7 @@ final class Coordinator {
                 self?.flush()
             }
         }
-        AppState.shared.numbers.recoverAfterWindowEvent()
+        AppState.shared.numbers.recoverAfterWindowEvent(event)
         flush()
     }
 

@@ -20,17 +20,15 @@ final class WorkspaceNumbers {
     private var removed: Set<UInt64> = []
     /// The workspace each window was on while the displays were settled. See `noteHomes()`.
     private var homes: [UInt32: WorkspaceWindowHome] = [:]
-    /// The last note of homes, kept only if the displays are still the same at the next one.
-    private var pendingHomes: [UInt32: WorkspaceWindowHome]?
     /// The displays as the last display change left them.
     private var knownDisplays: Set<String> = []
     /// Set by a display coming or going, until an arrangement completes and windows are back on their workspaces.
     private var displaced = false
     private var recoveryStarted: Date?
-    private var recoveryDeadline: Date?
-    private var recoveryGeneration = 0
+    private var recoveryHomes: [UInt32: WorkspaceWindowHome] = [:]
     private var restorationHistory = WindowRestorationHistory()
     private var recoveryQueued = false
+    private var cleanupNeeded = false
     private var recoveryTitles: [Window.Identity: String] = [:]
 
     var count: Int { AppState.shared.config.workspaces }
@@ -66,14 +64,13 @@ final class WorkspaceNumbers {
             if !connected.isEmpty || !disconnected.isEmpty {
                 displaced = true
                 recoveryStarted = Date()
-                recoveryDeadline = nil
-                recoveryGeneration += 1
+                recoveryHomes = homes
                 restorationHistory.beginDisplayChange()
                 recoveryTitles.removeAll()
             }
             arrangeSoon()
         }
-        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.noteHomes() }
+        noteHomes()
         // A Space removed in Mission Control leaves its workspace without one.
         EventHub.shared.subscribe { [weak self] event in
             guard let self, event.kind == .spaceDestroyed, !arranging, removed.remove(event.spaceID) == nil else { return }
@@ -131,10 +128,8 @@ final class WorkspaceNumbers {
             }
         }
         if displaced, completed {
-            recoveryDeadline = Date().addingTimeInterval(8)
             returnDisplaced()
             displaced = false
-            continueRecovery(generation: recoveryGeneration)
         }
         // Observers hear the result once, not every step on the way.
         if binding != start {
@@ -151,24 +146,18 @@ final class WorkspaceNumbers {
         Set(dinky_displays().filter { $0.displayID != 0 && CGDisplayIsOnline($0.displayID) != 0 }.map(\.uuid))
     }
 
-    /// Notes which workspace each window is on, once a second. A note is kept only when the displays are the
-    /// same a second later, so windows macOS is pouring off a display that is going away are never noted there.
+    /// Seed homes once; later changes come from window events.
     private func noteHomes() {
-        guard !displaced, recoveryDeadline == nil, !arranging, onlineDisplays == knownDisplays, let model = AppState.shared.coordinator?.model else {
-            pendingHomes = nil
-            return
-        }
-        if let pendingHomes { homes = pendingHomes }
-        restorationHistory.retain(Set(model.windows.values.map(\.identity)))
-        var noted: [UInt32: WorkspaceWindowHome] = [:]
-        for window in model.windows.values where window.isWorkspaceWindow {
-            if let n = number(of: dinky_window_space_id(window.id)) {
-                let previous = homes[window.id].flatMap { $0.identity == window.identity ? $0.title : nil }
-                let title = windowTitle(window) ?? previous
-                noted[window.id] = .init(identity: window.identity, workspace: n, title: title ?? "")
-            }
-        }
-        pendingHomes = noted
+        guard let model = AppState.shared.coordinator?.model else { return }
+        for window in model.windows.values { noteHome(window, refreshTitle: true) }
+    }
+
+    private func noteHome(_ window: Window, refreshTitle: Bool) {
+        guard !displaced, !arranging, onlineDisplays == knownDisplays, window.isWorkspaceWindow,
+              let n = number(of: dinky_window_space_id(window.id)) else { return }
+        let previous = homes[window.id].flatMap { $0.identity == window.identity ? $0.title : nil }
+        let title = refreshTitle || previous == nil ? windowTitle(window) ?? previous : previous
+        homes[window.id] = .init(identity: window.identity, workspace: n, title: title ?? "")
     }
 
     /// Moves windows that a display change left off their workspace back onto it.
@@ -178,16 +167,28 @@ final class WorkspaceNumbers {
         if let windows = AppState.shared.coordinator?.model.windows, recoveryStarted != nil {
             let candidates = replacementCandidates()
             let live = Set(windows.values.map(\.identity))
-            for (old, replacement) in workspaceReplacements(homes: Array(homes.values), candidates: candidates, live: live) {
-                homes.removeValue(forKey: old.identity.id)
-                homes[replacement.identity.id] = .init(identity: replacement.identity, workspace: old.workspace, title: old.title)
+            for (old, replacement) in workspaceReplacements(homes: Array(recoveryHomes.values), candidates: candidates, live: live) {
+                recoveryHomes.removeValue(forKey: old.identity.id)
+                recoveryHomes[replacement.identity.id] = .init(identity: replacement.identity, workspace: old.workspace, title: old.title)
             }
         }
-        for (id, home) in homes {
+        if let windows = AppState.shared.coordinator?.model.windows {
+            // A closed original without a replacement in this event batch must not claim a later new window.
+            recoveryHomes = recoveryHomes.filter { windows[$0.key]?.identity == $0.value.identity }
+            if recoveryHomes.isEmpty {
+                recoveryStarted = nil
+                recoveryTitles.removeAll()
+            }
+        }
+        for (id, home) in recoveryHomes {
             guard !restorationHistory.returnedDuringChange(home.identity),
                   AppState.shared.coordinator?.model.windows[id]?.identity == home.identity else { continue }
             let n = home.workspace
             let space = dinky_window_space_id(id)
+            if let target = binding[n], space == target {
+                restorationHistory.noteReturn(home.identity)
+                continue
+            }
             // A window on a full-screen Space, or gone, stays put.
             guard let target = binding[n], space != target,
                   model.display(containingSpace: space)?.userSpaces.contains(space) == true else { continue }
@@ -201,7 +202,7 @@ final class WorkspaceNumbers {
         let arrived = { targets.filter { dinky_window_space_id($0.key) == $0.value }.count }
         _ = waitUntil(1) { arrived() == targets.count }
         for (id, target) in targets where dinky_window_space_id(id) == target {
-            if let home = homes[id] {
+            if let home = recoveryHomes[id] {
                 restorationHistory.noteReturn(home.identity)
             }
             AppState.shared.coordinator?.model.refresh(id)
@@ -213,28 +214,42 @@ final class WorkspaceNumbers {
     func deferTiling(_ window: Window) -> Bool {
         guard window.isWorkspaceWindow, !restorationHistory.returnedDuringChange(window.identity) else { return false }
         let changing = onlineDisplays != knownDisplays
-        guard changing || displaced || recoveryDeadline != nil else { return false }
-        if let home = homes[window.id], home.identity == window.identity {
+        guard changing || displaced || recoveryStarted != nil else { return false }
+        if let home = recoveryHomes[window.id], home.identity == window.identity {
             return changing || binding[home.workspace] != dinky_window_space_id(window.id)
         }
         guard let started = recoveryStarted, window.identity.firstSeen >= started else { return false }
-        // Wait for an overlapping original to close. Recovery itself requires that before moving anything.
+        guard let windows = AppState.shared.coordinator?.model.windows else { return false }
         let candidates = replacementCandidates()
-        return workspaceReplacements(homes: Array(homes.values), candidates: candidates, live: [])
+        return workspaceReplacements(homes: Array(recoveryHomes.values), candidates: candidates, live: Set(windows.values.map(\.identity)))
             .contains { $0.1.identity == window.identity }
     }
 
     func wasRestored(_ window: Window) -> Bool { restorationHistory.wasRestored(window.identity) }
 
-    /// Coalesce window events; do not wait for the recovery timer after an original closes.
-    func recoverAfterWindowEvent() {
-        guard !displaced, recoveryDeadline != nil, !recoveryQueued else { return }
+    /// Coalesce window events after the model has applied their updates.
+    func recoverAfterWindowEvent(_ event: WindowEvent) {
+        guard let window = event.window else { return }
+        if event.change == .removed {
+            homes.removeValue(forKey: window.id)
+            if recoveryStarted != nil { cleanupNeeded = true }
+        } else {
+            noteHome(window, refreshTitle: event.kind == .windowTitle)
+        }
+        if let model = AppState.shared.coordinator?.model {
+            restorationHistory.retain(Set(model.windows.values.map(\.identity)))
+        }
+        guard !displaced, recoveryStarted != nil, !recoveryQueued else { return }
         recoveryQueued = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             recoveryQueued = false
-            guard !arranging, !displaced, recoveryDeadline != nil, onlineDisplays == knownDisplays else { return }
+            guard !arranging, !displaced, recoveryStarted != nil, onlineDisplays == knownDisplays else { return }
             returnDisplaced()
+            if cleanupNeeded {
+                cleanupNeeded = false
+                arrangeSoon(after: 0)
+            }
         }
     }
 
@@ -247,9 +262,9 @@ final class WorkspaceNumbers {
 
     private func replacementCandidates() -> [WorkspaceWindowHome] {
         guard let windows = AppState.shared.coordinator?.model.windows, let started = recoveryStarted else { return [] }
-        let pids = Set(homes.values.map { $0.identity.pid })
+        let pids = Set(recoveryHomes.values.map { $0.identity.pid })
         return windows.values.filter {
-            $0.isWorkspaceWindow && homes[$0.id] == nil && $0.identity.firstSeen >= started && pids.contains($0.pid)
+            $0.isWorkspaceWindow && recoveryHomes[$0.id] == nil && $0.identity.firstSeen >= started && pids.contains($0.pid)
         }.compactMap { window in
             guard let title = replacementTitle(window) else { return nil }
             return .init(identity: window.identity, workspace: 0, title: title)
@@ -262,27 +277,6 @@ final class WorkspaceNumbers {
         guard AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &value) == .success,
               let title = value as? String, !title.isEmpty else { return nil }
         return title
-    }
-
-    /// Apps can replace a restored window after the first move. Keep the settled homes until that finishes.
-    private func continueRecovery(generation: Int) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self, generation == recoveryGeneration, let deadline = recoveryDeadline else { return }
-            guard Date() < deadline else {
-                recoveryDeadline = nil
-                recoveryStarted = nil
-                pendingHomes = nil
-                // Replacement windows can temporarily occupy an unnumbered Space during arrangement.
-                // Recheck once recovery finishes, when the app has closed its old windows.
-                arrangeSoon(after: 0)
-                return
-            }
-            if !arranging, !displaced, onlineDisplays == knownDisplays {
-                returnDisplaced()
-                AppState.shared.coordinator?.reconcile()
-            }
-            continueRecovery(generation: generation)
-        }
     }
 
     /// The Spaces among `spaces` with windows dinky would tile or restore there: helper windows some apps keep
