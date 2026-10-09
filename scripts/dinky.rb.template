@@ -13,7 +13,7 @@ cask "dinky" do
   end
 
   auto_updates true
-  depends_on macos: ">= :sequoia"
+  depends_on macos: :sequoia
 
   app "dinky.app"
   binary "#{appdir}/dinky.app/Contents/MacOS/dinky"
