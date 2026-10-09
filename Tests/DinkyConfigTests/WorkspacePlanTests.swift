@@ -71,6 +71,23 @@ struct WorkspacePlanTests {
         #expect(world.windows[9] == 2)
     }
 
+    @Test func `Cleanup after replacement closes removes the extra Space without rebinding the workspace`() {
+        var world = World(displays: [Self.display("L", "Built-in", main: true, count: 2, [1, 2, 3, 4, 5]),
+                                     Self.display("S", "External", main: false, count: 2, [9])],
+                          windows: [5: 1, 9: 1], binding: [1: 1, 2: 2, 3: 3, 4: 4, 5: 5])
+        world.settle(fivePlusSide)
+        #expect(world.spaces("S") == [9, 1000])
+        #expect(world.binding[5] == 1000)
+        // The app closes its temporary window after the session has returned to its workspace.
+        world.windows[9] = 0
+        world.actions = []
+        world.settle(fivePlusSide)
+        #expect(world.actions == [.remove(space: 9)])
+        #expect(world.spaces("S") == [1000])
+        #expect(world.binding[5] == 1000)
+        #expect(world.windows[1000] == 1)
+    }
+
     @Test func `Undocking keeps the merged Space and puts it back in order`() {
         var world = World(displays: [Self.display("P", "PG27UCDM", main: true, count: 2, [1, 2, 3, 4]),
                                      Self.display("S", "LS24D60xU", main: false, count: 2, [9])])

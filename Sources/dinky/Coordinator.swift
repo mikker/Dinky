@@ -124,6 +124,7 @@ final class Coordinator {
                 self?.flush()
             }
         }
+        AppState.shared.numbers.recoverAfterWindowEvent()
         flush()
     }
 
@@ -204,6 +205,15 @@ final class Coordinator {
     /// Classifies a window the first time it is on screen, then keeps it in the tree of its current Space
     /// while it is shown: minimized windows, windows of hidden apps and inactive tabs read as minimized.
     func track(_ window: Window) {
+        if AppState.shared.numbers.deferTiling(window) {
+            // Release the old tile without classifying or adopting the window on its temporary Space.
+            if let space = placements[window.id]?.space {
+                edit(space) { $0.remove(window.id) }
+                placements[window.id]?.space = nil
+                animator.forget(window.id)
+            }
+            return
+        }
         if placements[window.id] == nil {
             // AX only lists windows on a Space that is on screen; the rest are classified when theirs is.
             guard window.isNormal, isVisible(window.spaceID) else { return }

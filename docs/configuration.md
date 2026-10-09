@@ -110,7 +110,16 @@ included, to a Space on its display and removes the Space left behind. Empty
 leftover Spaces are removed; ones with windows are left alone, unnumbered. A
 display with no workspaces keeps one unnumbered Space. Windows macOS piles onto
 another workspace when a display goes away, as around sleep, go back to their
-own workspace once the displays settle.
+own workspace once the displays settle. Dinky also records the workspace of
+hidden and minimized document windows, including inactive native tabs. Helper
+windows do not count as workspace contents. For eight seconds after a display
+change settles, dinky also restores replacement document windows when the old
+window has closed and the same process and a unique, nonempty title identify
+the replacement. Ambiguous replacements keep the workspace where they open.
+During recovery, displaced windows stay out of temporary workspace layouts.
+Restored windows keep their workspace when first shown after reconnecting;
+the rule that new windows follow the focused display does not apply to them.
+Dinky then removes empty Spaces left by temporary replacement windows.
 
 ## `[display.<pattern>]`
 
