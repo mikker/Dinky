@@ -114,7 +114,7 @@ final class BorderManager {
             return
         }
         // Minimized windows land here too (they are still documents, just not visible), so the border hides.
-        guard window.isOrderedIn, window.isVisible, !window.isMinimized, visibleSpaces.contains(window.spaceID), !MissionControl.shared.active else {
+        guard window.isShown, window.isVisible, !window.isMinimized, visibleSpaces.contains(window.spaceID), !MissionControl.shared.active else {
             borders[window.id]?.hide()
             return
         }

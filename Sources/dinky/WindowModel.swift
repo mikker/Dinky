@@ -17,6 +17,9 @@ struct Window {
     var level = 0
     var spaceID: UInt64 = 0
     var isOrderedIn = false
+    /// On-screen confirmation when WindowServer reports a document window as ordered out.
+    var isOnScreen = false
+    var isAppHidden = false
     var isDocument = false
     var isVisible = false
     var isMinimized = false
@@ -25,9 +28,11 @@ struct Window {
     var id: UInt32 { identity.id }
     var pid: pid_t { identity.pid }
 
-    // Tileable: normal layer, on screen, visible (not minimized), a document window rather than a sheet,
-    // panel or popup.
-    var isNormal: Bool { level == 0 && isOrderedIn && isVisible && isDocument }
+    /// Some remote desktop windows are on screen while their ordered-in flag is clear.
+    var isShown: Bool { !isAppHidden && (isOrderedIn || isOnScreen) }
+
+    // Tileable: normal layer, shown, visible and not minimized, a document rather than a panel or popup.
+    var isNormal: Bool { level == 0 && isDocument && isShown && isVisible && !isMinimized }
 }
 
 struct WindowEvent {
@@ -171,6 +176,19 @@ final class WindowModel {
         window.isVisible = info.isVisible
         window.isMinimized = info.isMinimized
         window.cornerRadius = Int(info.cornerRadius)
+        window.isAppHidden = NSRunningApplication(processIdentifier: window.pid)?.isHidden ?? false
+        window.isOnScreen = false
+        if window.level == 0, window.isDocument, window.isVisible, !window.isMinimized,
+           !window.isAppHidden, !window.isOrderedIn {
+            // Confirm this exact window, not merely that its app has another visible window. The public
+            // list does not include an inactive tab or a genuinely ordered-out document as on screen.
+            let entries = CGWindowListCopyWindowInfo(.optionIncludingWindow, window.id) as? [[String: Any]] ?? []
+            window.isOnScreen = entries.contains {
+                ($0[kCGWindowNumber as String] as? UInt32) == window.id
+                    && ($0[kCGWindowOwnerPID as String] as? Int32) == window.pid
+                    && ($0[kCGWindowIsOnscreen as String] as? Bool) == true
+            }
+        }
     }
 
     private func watch() {
