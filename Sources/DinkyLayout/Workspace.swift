@@ -31,6 +31,14 @@ public struct Workspace: Equatable, Sendable {
     public var fullscreen: WindowID? { isFullscreen ? focused : nil }
     /// Sizes windows refused to go below. Tiles grow to them when their siblings can give the space.
     public var minimumSizes: [WindowID: CGSize] = [:]
+    /// Ratio of the full monitor, independent of menu bar, Dock and outer gaps.
+    public var displayAspectRatio: CGFloat = 0
+    public var ultrawideMinAspectRatio: CGFloat = 2.3
+    /// Disabled by default; existing configurations keep their geometry.
+    public var windowMaxAspectRatio: CGFloat = 0
+    public var tilingAlignment = TilingAlignment.center
+    /// User-chosen area width, until the tiled membership or configuration changes.
+    public var manualTilingWidth: CGFloat?
 
     /// An empty workspace laid out by `algorithm`. A dwindle accordion root with `autoOrientAccordions` starts
     /// `auto`, as a container switched to accordion would, so it runs top to bottom on a tall display.
@@ -60,6 +68,7 @@ public struct Workspace: Equatable, Sendable {
     /// has changed the template structure, use the focused-leaf split instead of discarding the edits.
     public mutating func insert(_ id: WindowID) {
         guard !contains(id) else { return }
+        manualTilingWidth = nil
         if case .fixed(let rows, let columns, _) = algorithm, windows.isEmpty, !isFixedTree {
             root = Self.fixedRoot(rows: rows, columns: columns)
         }
@@ -89,6 +98,7 @@ public struct Workspace: Equatable, Sendable {
     /// If it was focused, focus moves to the window that took its place.
     public mutating func remove(_ id: WindowID) {
         guard let path = root.path(of: id) else { return }
+        manualTilingWidth = nil
         if case .fixed = algorithm, isFixedTree {
             removeFixedWindow(at: path)
             trimEmptyOverflow()
@@ -320,7 +330,7 @@ public struct Workspace: Equatable, Sendable {
 
     /// The axis of the container at `path` in `layout`, for callers asking about several containers at once.
     func axisOfContainer(at path: [Int], in layout: Layout) -> Orientation {
-        root.container(at: path).axis(in: rect(at: path, in: layout))
+        layout.containerAxes[path] ?? root.container(at: path).axis(in: rect(at: path, in: layout))
     }
 
     /// The rectangle the container at `path` is laid out in, gaps and minimum sizes applied.
@@ -371,7 +381,8 @@ public struct Workspace: Equatable, Sendable {
     /// The layout ignoring fullscreen, used for geometry questions.
     func tiledLayout() -> Layout {
         var result = Layout()
-        root.layout(in: gaps.inset(bounds), gaps: gaps, padding: accordionPadding, minimums: minimumSizes, into: &result)
+        let tree = tilingTree()
+        tree.layout(in: tilingBounds(for: tree), gaps: gaps, padding: accordionPadding, minimums: minimumSizes, into: &result)
         return result
     }
 

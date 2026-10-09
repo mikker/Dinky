@@ -34,6 +34,11 @@ extension Coordinator {
         guard let key = placements[id]?.space, let layout = workspaces[key]?.layout(), let window = model.windows[id],
               let expected = layout.frames[id], !window.frame.isClose(to: expected, within: 2) else { return }
         if let edges = movedEdges(from: expected, to: window.frame) {
+            if let workspace = workspaces[key], workspace.limitsManualHeightResize(of: id),
+               abs(window.frame.height - expected.height) > 5 {
+                setFloating(id, true)
+                return
+            }
             edit(key) { $0.resize(id, to: window.frame.size, moving: edges) }
         } else if let target = dropTarget(of: id, in: layout) {
             edit(key) { $0.swap(id, target) }

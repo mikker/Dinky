@@ -25,6 +25,11 @@ extension Config {
     # rows = 3
     # expand = 'columns'           # columns | rows | accordion (overflow in last cell)
 
+    # Limit each tiled window's width/height on ultrawide displays; 0 keeps the full area.
+    window-max-aspect-ratio = 0.0   # 1.5 = 3:2
+    ultrawide-min-aspect-ratio = 2.3 # full monitor width/height threshold
+    tiling-alignment = 'center'    # left | center | right
+
     [accordion]
     padding = 30                    # points the neighbours peek out by
     orientation = 'auto'            # auto: run along the container's longer side | keep
@@ -41,6 +46,8 @@ extension Config {
     # Overrides for one display.
     # [display.main]
     # gaps.outer.top = 44
+    # window-max-aspect-ratio = 1.5
+    # tiling-alignment = 'center'
 
     [borders]
     enabled = true

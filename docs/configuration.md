@@ -26,6 +26,9 @@ permalink: /configuration/
 | `start-at-login` | `true` | Register as a login item. |
 | `workspaces` | `5` | Workspaces across all displays, one native Space each. dinky creates and removes Spaces to match. |
 | `default-layout` | `'tiles'` | `'tiles'` (the existing dwindle layout), `'dwindle'`, `'accordion'`, or `'fixed'`. |
+| `window-max-aspect-ratio` | `0.0` | Maximum tiled window width/height on ultrawide displays. `1.5` means 3:2; `0` disables. See [Ultrawide displays](#ultrawide-displays). |
+| `ultrawide-min-aspect-ratio` | `2.3` | Minimum full monitor width/height for the limit to apply. |
+| `tiling-alignment` | `'center'` | Place the constrained tiling area at `'left'`, `'center'`, or `'right'`. |
 | `default-tiling` | `true` | Set `false` to leave workspaces untiled unless overridden. |
 | `follow-app-activation` | `true` | Cmd-Tab and Dock clicks switch Spaces the fast way. Needs the macOS "switch to a Space with open windows" setting off. |
 | `float-windows-without-fullscreen` | `true` | Float windows that can't go full screen, such as Finder's copy progress, About This Mac and Calculator. Terminals and editors that can hide their title bar still tile. A `layout tiling` rule tiles a window anyway. |
@@ -114,13 +117,47 @@ own workspace once the displays settle.
 
 ## `[display.<pattern>]`
 
-Per-display `gaps`, with the patterns above. Name patterns beat
+Per-display `gaps`, `window-max-aspect-ratio`, `ultrawide-min-aspect-ratio`,
+and `tiling-alignment`, with the patterns above. Name patterns beat
 `main`/`secondary`; longer names beat shorter.
 
 ```toml
 [display.main]          # the display with the bar
 gaps.outer.top = 44
 ```
+
+## Ultrawide displays
+
+The limit is opt-in and applies to each tiled window, including workspaces with
+several windows. Enable it globally or for one display:
+
+```toml
+[display.secondary]
+window-max-aspect-ratio = 1.5 # 3:2
+ultrawide-min-aspect-ratio = 2.3
+tiling-alignment = 'center'  # left | center | right
+```
+
+Detection uses the full monitor's width divided by its height, before subtracting
+the menu bar, Dock or gaps. A 3440×1440 monitor qualifies; a 1920×1080 monitor does
+not. Rotating a monitor or changing its resolution recalculates eligibility.
+
+On an eligible monitor, dinky narrows the entire tiling area until the tiles fit
+the requested ratio, using each tile's height after gaps. Two side-by-side windows
+can use more width than one, while a short tile in a stacked column can narrow
+the whole area. The tree, its split ratios and height stay intact. Auto container
+orientations are resolved before narrowing to keep divisions stable. Application
+minimum widths take priority; when these conflict with the ratio, preserving the
+tree and its minimum widths takes priority. Fixed layouts retain their reserved
+cells, and fullscreen uses the full available area.
+
+Mouse and command resizing override automatic narrowing, preserving your chosen
+area width and tree ratios for the current tiled membership. A lone tile can be
+widened beyond the configured ratio. Changing its height with the mouse by more
+than 5 points makes it floating and keeps its frame. Opening or removing a tiled
+window returns to automatic sizing. Changing the ratio, threshold, alignment or
+display overrides also clears the manual area width. Ordinary window events and
+reloading an unchanged configuration preserve it. Floating windows do not count.
 
 ## `[borders]`
 

@@ -129,10 +129,14 @@ extension Workspace {
     public mutating func resize(by delta: CGFloat, along axis: Orientation? = nil) -> Bool {
         isFullscreen = false
         guard let focused, var path = root.path(of: focused) else { return false }
+        if abs(delta) >= 0.5, let frame = tiledLayout().frames[focused] {
+            let horizontal = (axis ?? containerAxis(of: focused)) == .horizontal
+            if resizeTilingArea(focused, to: horizontal ? frame.width + delta : frame.width) { return true }
+        }
         let layout = tiledLayout()
         while let index = path.popLast() {
             let parent = root.container(at: path)
-            let rect = rect(at: path, in: layout), along = parent.axis(in: rect)
+            let rect = rect(at: path, in: layout), along = axisOfContainer(at: path, in: layout)
             guard parent.mode == .tiles, parent.children.count > 1, axis ?? along == along else { continue }
             // The children share the container's extent less the gaps between them, as `tileRects` splits it.
             let extent = (along == .horizontal ? rect.width : rect.height) - gaps.inner(along) * CGFloat(parent.children.count - 1)

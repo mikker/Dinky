@@ -11,8 +11,9 @@ extension Workspace {
     /// False when nothing changed.
     @discardableResult
     public mutating func resize(_ id: WindowID, to size: CGSize, moving edges: Set<Direction> = []) -> Bool {
-        guard fullscreen == nil else { return false }
-        var changed = false
+        guard fullscreen == nil, let frame = tiledLayout().frames[id],
+              abs(size.width - frame.width) >= 0.5 || abs(size.height - frame.height) >= 0.5 else { return false }
+        var changed = resizeTilingArea(id, to: size.width)
         for axis in [Orientation.horizontal, .vertical] {
             guard let frame = tiledLayout().frames[id] else { return false }
             let delta = axis == .horizontal ? size.width - frame.width : size.height - frame.height
@@ -32,7 +33,7 @@ extension Workspace {
             let sides = edge.map { [$0.isForward ? index + 1 : index - 1] } ?? [index - 1, index + 1]
             let neighbours = sides.filter { parent.children.indices.contains($0) }
             let rect = rect(at: path, in: layout)
-            guard parent.mode == .tiles, !neighbours.isEmpty, parent.axis(in: rect) == axis else { continue }
+            guard parent.mode == .tiles, !neighbours.isEmpty, axisOfContainer(at: path, in: layout) == axis else { continue }
             let gap = gaps.inner(axis)
             let available = (axis == .horizontal ? rect.width : rect.height) - gap * CGFloat(parent.children.count - 1)
             // A share may shrink to the larger of `minimumRatio` and its minimum size, unless it is already below.

@@ -88,6 +88,11 @@ final class Coordinator {
     }
 
     func update(config: Config) {
+        if self.config.windowMaxAspectRatio != config.windowMaxAspectRatio
+            || self.config.ultrawideMinAspectRatio != config.ultrawideMinAspectRatio
+            || self.config.tilingAlignment != config.tilingAlignment || self.config.displays != config.displays {
+            for key in workspaces.keys { workspaces[key]!.manualTilingWidth = nil }
+        }
         self.config = config
         animator.setDuration(ms: config.animations.durationMs)
         if config.borders.enabled {
@@ -156,6 +161,7 @@ final class Coordinator {
             guard let display = displays.display(containingSpace: key) else { continue }
             workspaces[key]!.bounds = display.visibleArea
             workspaces[key]!.gaps = gaps(on: display)
+            configureUltrawide(key, on: display)
         }
     }
 
@@ -167,6 +173,7 @@ final class Coordinator {
         tree.bounds = display.visibleArea
         tree.gaps = gaps(on: display)
         workspaces[to] = tree
+        configureUltrawide(to, on: display)
         for (id, placement) in placements where placement.space == from { placements[id]!.space = to }
     }
 
@@ -177,6 +184,14 @@ final class Coordinator {
             workspaces[key]!.autoOrientAccordions = config.accordion.orientation == .auto
             workspaces[key]!.setAlgorithm(algorithm(settings(for: key)))
         }
+    }
+
+    private func configureUltrawide(_ key: UInt64, on display: Display) {
+        let settings = config.ultrawideSettings(for: displays.monitor(display))
+        workspaces[key]!.displayAspectRatio = display.frame.height > 0 ? display.frame.width / display.frame.height : 0
+        workspaces[key]!.ultrawideMinAspectRatio = CGFloat(settings.threshold)
+        workspaces[key]!.windowMaxAspectRatio = CGFloat(settings.ratio)
+        workspaces[key]!.tilingAlignment = DinkyLayout.TilingAlignment(settings.alignment)
     }
 
     private func gaps(on display: Display) -> DinkyLayout.Gaps {
@@ -281,6 +296,7 @@ final class Coordinator {
                                         accordionPadding: CGFloat(config.accordion.padding),
                                         autoOrientAccordions: config.accordion.orientation == .auto,
                                         algorithm: algorithm(settings))
+            configureUltrawide(key, on: display)
         }
         return key
     }
