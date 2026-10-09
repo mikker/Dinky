@@ -52,6 +52,9 @@ struct SchemaTests {
         default-tiling = true
         follow-app-activation = false
         float-windows-without-fullscreen = false
+        window-max-aspect-ratio = 1.5
+        ultrawide-min-aspect-ratio = 2.3
+        tiling-alignment = 'center'
 
         [workspace-to-display]
         1 = 'main'
@@ -77,6 +80,9 @@ struct SchemaTests {
         outer.right = 4
 
         [display.main]
+        window-max-aspect-ratio = 1.5
+        ultrawide-min-aspect-ratio = 2.3
+        tiling-alignment = 'right'
         gaps.inner = 2
         gaps.outer.top = 30
         gaps.outer.bottom = 0
@@ -84,6 +90,9 @@ struct SchemaTests {
         gaps.outer.right = 0
 
         [display.secondary]
+        window-max-aspect-ratio = 0.0
+        ultrawide-min-aspect-ratio = 3.0
+        tiling-alignment = 'left'
         gaps.inner.horizontal = 1
         gaps.inner.vertical = 1
         gaps.outer = 8

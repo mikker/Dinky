@@ -25,6 +25,13 @@ final class Table {
     func int(_ key: String) throws -> Int? { try scalar(key, "an integer") { Int(try $0.integer(forKey: key)) } }
     func double(_ key: String) throws -> Double? { try scalar(key, "a number") { try $0.float(forKey: key) } }
 
+    func number(_ key: String) throws -> Double? {
+        try scalar(key, "a number") { table in
+            if let integer = try? table.integer(forKey: key) { return Double(integer) }
+            return try table.float(forKey: key)
+        }
+    }
+
     func string(_ key: String) throws -> String? {
         // TOMLDecoder crashes reading a one digit integer as a string, so rule integers out first.
         if (try? table.integer(forKey: key)) != nil { throw ConfigError(path: path(key), "expected a string") }

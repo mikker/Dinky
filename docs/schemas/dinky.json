@@ -63,6 +63,9 @@
       "default": true,
       "description": "Float windows that can't go full screen, such as Finder's copy progress, About This Mac and Calculator. A `layout tiling` rule tiles one anyway."
     },
+    "ultrawide-min-aspect-ratio": { "type": "number", "exclusiveMinimum": 0, "default": 2.3, "description": "Full monitor width/height required for the tile aspect-ratio limit." },
+    "window-max-aspect-ratio": { "type": "number", "minimum": 0, "default": 0, "description": "Maximum width/height of each tiled window on ultrawide displays; 0 disables. Known minimum widths take priority. Fixed templates and fullscreen bypass the limit." },
+    "tiling-alignment": { "type": "string", "enum": ["left", "center", "right"], "default": "center", "description": "Horizontal placement of the constrained tiling area." },
     "accordion": {
       "type": "object",
       "additionalProperties": false,
@@ -90,7 +93,10 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "gaps": { "$ref": "#/definitions/gaps" }
+          "gaps": { "$ref": "#/definitions/gaps" },
+          "ultrawide-min-aspect-ratio": { "type": "number", "exclusiveMinimum": 0 },
+          "window-max-aspect-ratio": { "type": "number", "minimum": 0 },
+          "tiling-alignment": { "type": "string", "enum": ["left", "center", "right"] }
         }
       }
     },

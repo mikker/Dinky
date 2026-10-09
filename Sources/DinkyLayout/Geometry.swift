@@ -45,6 +45,7 @@ public struct Layout: Equatable, Sendable {
     public var order: [WindowID] = []
     /// The rectangle each container was laid out in, by its path from the root. Empty containers included.
     var containerRects: [[Int]: CGRect] = [:]
+    var containerAxes: [[Int]: Orientation] = [:]
 
     public init(frames: [WindowID: CGRect] = [:], order: [WindowID] = []) {
         self.frames = frames
@@ -73,6 +74,7 @@ extension Container {
                 virtual: Bool = false, path: [Int] = [], into result: inout Layout) {
         result.containerRects[path] = rect
         let tiled = mode == .tiles || virtual, axis = axis(in: rect), gap = gaps.inner(axis)
+        result.containerAxes[path] = axis
         let rects = tiled
             ? tileRects(in: rect, gap: gap, minimums: children.map { $0.minimumExtent(axis, gap: gap, padding: padding, minimums) })
             : accordionRects(in: rect, padding: padding)

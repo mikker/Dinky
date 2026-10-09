@@ -22,6 +22,10 @@ public struct Config: Equatable {
     public var followAppActivation = true
     /// Float standard windows whose fullscreen button is missing or disabled, as AeroSpace does.
     public var floatWindowsWithoutFullscreen = true
+    public var ultrawideMinAspectRatio = 2.3
+    /// Maximum width/height of each tile on ultrawide displays; 0 disables the limit.
+    public var windowMaxAspectRatio = 0.0
+    public var tilingAlignment = TilingAlignment.center
     public var accordion = Accordion()
     public var gaps = Gaps()
     /// `[display.<pattern>]` overrides, in file order.
@@ -105,6 +109,9 @@ public struct Config: Equatable {
         }
         followAppActivation = try t.bool("follow-app-activation") ?? followAppActivation
         floatWindowsWithoutFullscreen = try t.bool("float-windows-without-fullscreen") ?? floatWindowsWithoutFullscreen
+        ultrawideMinAspectRatio = try aspectRatio(t, "ultrawide-min-aspect-ratio", positive: true) ?? ultrawideMinAspectRatio
+        windowMaxAspectRatio = try aspectRatio(t, "window-max-aspect-ratio") ?? windowMaxAspectRatio
+        tilingAlignment = try t.choice("tiling-alignment") ?? tilingAlignment
         accordion = try t.table("accordion").map(Accordion.init) ?? accordion
         gaps = try t.table("gaps").map { try gaps.applying(GapsPatch($0)) } ?? gaps
         if let displayTable = try t.table("display") {

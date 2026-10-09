@@ -36,3 +36,13 @@ extension DinkyLayout.Gaps {
                   left: CGFloat(gaps.outer.left), right: CGFloat(gaps.outer.right))
     }
 }
+
+extension DinkyLayout.TilingAlignment {
+    init(_ alignment: DinkyConfig.TilingAlignment) {
+        self = switch alignment {
+        case .left: .left
+        case .center: .center
+        case .right: .right
+        }
+    }
+}

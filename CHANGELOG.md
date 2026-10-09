@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Tiling
+
+- Optional aspect-ratio limits keep tiled windows from stretching across ultrawide displays, even with several windows. Choose left, center or right alignment globally or per display. Manual resizing preserves your chosen width until tiled windows are added or removed; fullscreen and fixed templates keep their full area.
+
 ## 0.15
 
 ### Tiling
