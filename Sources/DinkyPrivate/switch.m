@@ -4,7 +4,7 @@
 #import <AppKit/AppKit.h>
 #import <mach/mach_time.h>
 
-// Switches Spaces with mimi's augmented Dock swipe (mimi internal/native/space.m + dockswipe.m).
+// Switches Spaces with the legacy Dock swipe only on macOS 15; all other majors use mimi's augmented swipe.
 // RESULTS.md records the other paths the spike tried and why this one won.
 
 // Private CGEvent field numbers for a synthetic Dock swipe.
@@ -218,9 +218,38 @@ static CGEventRef mimi_create_event(int phase, double sign)
     return augmented;
 }
 
-// mimi mimiPostAugmentedDockSwipe.
-static bool mimi_post_swipe(double sign)
+// Legacy Dock swipe encoding, used only on macOS 15.
+static bool mimi_post_legacy_swipe(double sign)
 {
+    CGEventRef event = CGEventCreate(NULL);
+    if (!event) return false;
+
+    CGEventSetIntegerValueField(event, kEventTypeField, kEventDockControl);
+    CGEventSetIntegerValueField(event, kGestureHIDType, kHIDEventTypeDockSwipe);
+    CGEventSetIntegerValueField(event, kGestureSwipeMotion, kGestureMotionHorizontal);
+    CGEventSetDoubleValueField(event, kGestureSwipeProgress, sign);
+    CGEventSetDoubleValueField(event, kGestureSwipeVelocityX, sign * kMimiVelocity);
+
+    CGEventSetIntegerValueField(event, kGesturePhase, kPhaseBegan);
+    CGEventPost(kCGSessionEventTap, event);
+    CGEventSetIntegerValueField(event, kGesturePhase, kPhaseEnded);
+    CGEventPost(kCGSessionEventTap, event);
+    CFRelease(event);
+    return true;
+}
+
+// Keep version selection pure so the compatibility boundary can be regression-tested without
+// replacing NSProcessInfo's process-wide operating-system version.
+static bool uses_legacy_swipe_for_major_version(NSInteger majorVersion)
+{
+    return majorVersion == 15;
+}
+
+// Post using the encoding selected for a specific macOS major version.
+static bool mimi_post_swipe_for_major_version(double sign, NSInteger majorVersion)
+{
+    if (uses_legacy_swipe_for_major_version(majorVersion)) return mimi_post_legacy_swipe(sign);
+
     static const int phases[] = {kPhaseBegan, kPhaseChanged, kPhaseEnded};
     for (size_t i = 0; i < sizeof(phases) / sizeof(phases[0]); i++) {
         CGEventRef event = mimi_create_event(phases[i], sign);
@@ -232,6 +261,13 @@ static bool mimi_post_swipe(double sign)
         CFRelease(event);
     }
     return true;
+}
+
+// mimi mimiPostAugmentedDockSwipe.
+static bool mimi_post_swipe(double sign)
+{
+    NSOperatingSystemVersion version = [[NSProcessInfo processInfo] operatingSystemVersion];
+    return mimi_post_swipe_for_major_version(sign, version.majorVersion);
 }
 
 static void pump(CFTimeInterval seconds)
