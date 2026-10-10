@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Workspace switching uses the legacy gesture encoding only on macOS 15; all other macOS major versions use the augmented encoding.
+
 ## 0.15
 
 ### Tiling

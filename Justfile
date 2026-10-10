@@ -1,8 +1,11 @@
 build:
     swift build
 
-test:
+test: test-space-switch
     swift test
+
+test-space-switch:
+    scripts/test-space-switch.sh
 
 bundle *flags:
     scripts/bundle.sh {{flags}}
