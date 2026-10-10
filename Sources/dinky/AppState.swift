@@ -30,7 +30,7 @@ final class AppState {
     let numbers = WorkspaceNumbers()
     /// Tiling and borders, started by the app once Accessibility is granted.
     private(set) var coordinator: Coordinator?
-    /// Untiled frames restored on disable, quit and explicit recovery, preserving current native Spaces.
+    /// Untiled frames restored on disable, quit and explicit recovery, returning windows to surviving original Spaces.
     let recovery = Recovery()
     private let hooks = Hooks()
     private let hoverFocus = HoverFocus()
@@ -63,29 +63,35 @@ final class AppState {
         // Once the windows are known, so each workspace's windows move with it, and before the hooks, which
         // report workspace numbers.
         numbers.arrange()
+        coordinator.session.finishStartup(coordinator: coordinator)
         hooks.start()
         hoverFocus.update(config: config.focusFollowsMouse)
     }
 
-    /// The one enable transition. Off stops tiling and restores reachable untiled frames on current Spaces.
+    /// The one enable transition. Off stops tiling and restores reachable untiled frames and surviving original Spaces.
     /// Returns the restore summary. This is the emergency path: `dinky enable off`, the
     /// menu's Enabled item, `dinky recover` and quitting all come through here.
     @discardableResult
     func setEnabled(_ on: Bool) -> String {
-        if on { coordinator?.session.resume() } else { coordinator?.session.pause() }
+        if on { coordinator?.session.resume() } else {
+            displays.reconcile()
+            let destinations = recovery.returnSpaces(windows: coordinator?.model.windows ?? [:],
+                                                      displays: displays.displays.map(RecoveryDisplay.init))
+            coordinator?.session.pause(returnSpaces: destinations)
+        }
         if on { recovery.resume() }
         enabled = on
         propagateEnabled()
         return on ? "" : recovery.restore()
     }
 
-    /// Explicit recovery stops tiling and retries unfinished frames without switching native Spaces.
+    /// Explicit recovery stops tiling and retries unfinished frames without switching focus.
     func recover() -> Reply {
         guard recovery.recoverable > 0 else { return .error("no unfinished windows to restore") }
         return .ok(setEnabled(false) + "; dinky is disabled, `dinky enable on` tiles again")
     }
 
-    /// Quitting stops tiling and restores reachable untiled frames without changing native Spaces.
+    /// Quitting stops tiling and restores reachable untiled frames and surviving original Spaces.
     func quit() {
         setEnabled(false)
     }

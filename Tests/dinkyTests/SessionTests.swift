@@ -350,4 +350,174 @@ struct SessionTests {
         #expect(Session(url: url).load() == nil)
         #expect(try Data(contentsOf: recovery) == original)
     }
+    @Test func `Startup reverses a recorded undo and waits for its Space event`() {
+        let session = Session()
+        var entries = journal().windows
+        for index in entries.indices { entries[index].returnSpaceID = 3 }
+        let saved = Session.Journal(windows: entries, spaces: journal().spaces)
+        var windows = [UInt32(1): window(1, space: 3, seen: 50), 2: window(2, space: 3, seen: 50)]
+        var moves: [UInt32: UInt64] = [:]
+        session.prepare(saved, windows: windows, spaces: [3, 815], launchDate: { _ in launched },
+                        move: { id, target in moves[id] = target; return true })
+        #expect(moves == [1: 815, 2: 815])
+        session.prune(windows: windows, spaces: [3, 815])
+        #expect(session.pendingWindows.count == 2)
+        var current = workspace()
+        let placements = windows.mapValues { _ in Placement(floating: false, space: 815) }
+        #expect(session.restore(815, workspace: &current, windows: windows, placements: placements, held: []) == .waiting)
+        let duringMove = session.snapshot(workspaces: [:], windows: windows, placements: [:],
+                                          displays: [display()], launchDate: { _ in launched })
+        #expect(duringMove.windows.map(\.spaceID) == [815, 815])
+        #expect(duringMove.windows.map(\.returnSpaceID) == [3, 3])
+        #expect(!session.isRestoring(on: 3))
+        #expect(!session.isRestoring(on: 815))
+        #expect(session.deferTiling(windows[1]!))
+        let interrupted = Session()
+        var retried = 0
+        interrupted.prepare(duringMove, windows: windows, spaces: [3, 815], launchDate: { _ in launched },
+                            move: { _, _ in retried += 1; return true })
+        #expect(retried == 2)
+        for id in windows.keys { windows[id]?.spaceID = 815 }
+        session.prune(windows: windows, spaces: [3, 815])
+        #expect(!session.isRestoring(on: 3))
+        #expect(!session.deferTiling(windows[1]!))
+        #expect(session.restore(815, workspace: &current, windows: windows, placements: placements, held: []) == .restored)
+        #expect(current.root == saved.spaces[0].layout.root)
+    }
+
+    @Test func `A deleted saved Space restores on the same numbered workspace`() {
+        let session = Session(), original = journal()
+        let saved = Session.Journal(windows: original.windows,
+                                    spaces: [.init(id: 815, layout: original.spaces[0].layout, workspaceNumber: 3)])
+        let windows = [UInt32(1): window(1, space: 3, seen: 50), 2: window(2, space: 3, seen: 50)]
+        var moves: [UInt32: UInt64] = [:]
+        session.prepare(saved, windows: windows, spaces: [3, 900], launchDate: { _ in launched }, binding: [3: 900],
+                        move: { id, target in moves[id] = target; return true })
+        #expect(moves == [1: 900, 2: 900])
+        #expect(session.pendingSpaces[900] == saved.spaces[0].layout)
+        #expect(session.pendingWindows.values.allSatisfy { $0.spaceID == 900 })
+    }
+
+    @Test func `A floating window on a deleted Space uses its saved workspace number`() {
+        let session = Session()
+        var entry = journal(floating: true).windows[0]
+        entry.workspaceNumber = 3
+        let saved = Session.Journal(windows: [entry], spaces: [])
+        var moves: [UInt32: UInt64] = [:]
+        session.prepare(saved, windows: [1: window(1, space: 3, seen: 50)], spaces: [3, 900],
+                        launchDate: { _ in launched }, binding: [3: 900],
+                        move: { id, target in moves[id] = target; return true })
+        #expect(moves == [1: 900])
+        #expect(session.pendingWindows[1]?.spaceID == 900)
+    }
+
+    @Test func `A manual move after undo is preserved and a refused startup move is skipped`() {
+        let session = Session()
+        var entry = journal(floating: true).windows[0]
+        entry.returnSpaceID = 3
+        let saved = Session.Journal(windows: [entry], spaces: [])
+        var moves = 0
+        session.prepare(saved, windows: [1: window(1, space: 816, seen: 50)], spaces: [3, 815, 816],
+                        launchDate: { _ in launched }, move: { _, _ in moves += 1; return true })
+        #expect(moves == 0)
+        #expect(session.pendingWindows.isEmpty)
+        session.prepare(saved, windows: [1: window(1, space: 3, seen: 50)], spaces: [3, 815],
+                        launchDate: { _ in launched }, move: { _, _ in moves += 1; return false })
+        #expect(moves == 1)
+        #expect(session.pendingWindows.isEmpty)
+    }
+
+    @Test func `Pausing records undo destinations without changing the managed layout`() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let session = Session(url: directory.appendingPathComponent("session.json")), saved = journal()
+        session.startSaving { saved }
+        session.pause(returnSpaces: [1: 3, 2: 816])
+        let stored = try #require(session.load())
+        #expect(stored.windows.map(\.returnSpaceID) == [3, 816])
+        #expect(stored.windows.map(\.spaceID) == [815, 815])
+        #expect(stored.spaces == saved.spaces)
+    }
+
+    @Test func `Unvisited document windows retain their managed Space for the undo round trip`() {
+        let session = Session()
+        let saved = session.snapshot(workspaces: [:], windows: [1: window(1, space: 816)], placements: [:],
+                                     displays: [display()], launchDate: { _ in launched })
+        #expect(saved.windows.count == 1)
+        #expect(saved.windows.first?.spaceID == 816)
+        #expect(saved.windows.first?.frame == nil)
+        #expect(saved.windows.first?.floatingOverride == nil)
+        #expect(saved.spaces.isEmpty)
+    }
+
+    @Test func `Planning restoration has no runtime side effects and upgrades workspace metadata`() {
+        let session = Session()
+        var entries = journal().windows
+        for index in entries.indices { entries[index].returnSpaceID = 3 }
+        let saved = Session.Journal(windows: entries, spaces: journal().spaces)
+        let windows = [UInt32(1): window(1, space: 3, seen: 50), 2: window(2, space: 3, seen: 50)]
+        let plan = session.restorationPlan(saved, windows: windows, spaces: [3, 815],
+                                           launchDate: { _ in launched }, binding: [3: 815])
+        #expect(plan.moves == [1: .init(source: 3, target: 815), 2: .init(source: 3, target: 815)])
+        #expect(plan.windows.values.allSatisfy { $0.workspaceNumber == 3 })
+        #expect(session.pendingWindows.isEmpty)
+        #expect(session.pendingSpaces.isEmpty)
+    }
+
+    @Test func `Repeated undo and deleted Space cycles preserve the layout and clear confirmed moves`() {
+        var saved = journal()
+        let expectedRoot = saved.spaces[0].layout.root
+        for cycle in 0..<10 {
+            let source = saved.windows[0].spaceID
+            let target = UInt64(900 + cycle)
+            let entries = saved.windows.map { entry in
+                var entry = entry
+                entry.returnSpaceID = 3
+                entry.workspaceNumber = 3
+                return entry
+            }
+            saved = Session.Journal(windows: entries,
+                                    spaces: [.init(id: source, layout: saved.spaces[0].layout, workspaceNumber: 3)])
+            var windows = [UInt32(1): window(1, space: 3, seen: Double(50 + cycle)),
+                           2: window(2, space: 3, seen: Double(50 + cycle))]
+            let session = Session()
+            var requests = 0
+            session.prepare(saved, windows: windows, spaces: [3, target], launchDate: { _ in launched }, binding: [3: target],
+                            move: { _, destination in requests += 1; return destination == target })
+            for _ in 0..<10 { session.prune(windows: windows, spaces: [3, target]) }
+            #expect(requests == 2)
+            #expect(!session.isRestoring(on: target))
+            for id in windows.keys { windows[id]?.spaceID = target }
+            session.prune(windows: windows, spaces: [3, target])
+            var current = workspace()
+            current.flatten()
+            let placements = windows.mapValues { _ in Placement(floating: false, space: target) }
+            #expect(session.restore(target, workspace: &current, windows: windows, placements: placements, held: []) == .restored)
+            #expect(current.root == expectedRoot)
+            _ = session.floatingJobs(windows: windows, placements: placements, displays: [display(current: target)])
+            #expect(session.pendingWindows.isEmpty)
+            #expect(session.pendingSpaces.isEmpty)
+            #expect(!session.deferTiling(windows[1]!))
+            saved = session.snapshot(workspaces: [target: current], windows: windows, placements: placements,
+                                     displays: [.init(uuid: "main", visibleFrame: visible, userSpaces: [3, target], currentSpace: target)],
+                                     binding: [3: target], launchDate: { _ in launched })
+            #expect(saved.windows.allSatisfy { $0.returnSpaceID == nil && $0.workspaceNumber == 3 })
+        }
+    }
+
+    @Test func `A closed unconfirmed move releases its layout without another native request`() {
+        let session = Session()
+        var entry = journal(floating: true).windows[0]
+        entry.returnSpaceID = 3
+        let saved = Session.Journal(windows: [entry], spaces: journal().spaces)
+        var moves = 0
+        session.prepare(saved, windows: [1: window(1, space: 3, seen: 50)], spaces: [3, 815], launchDate: { _ in launched },
+                        move: { _, _ in moves += 1; return true })
+        session.prune(windows: [:], spaces: [3, 815])
+        #expect(moves == 1)
+        #expect(session.pendingWindows.isEmpty)
+        #expect(session.pendingSpaces.isEmpty)
+        #expect(!session.isRestoring(on: 815))
+    }
+
 }

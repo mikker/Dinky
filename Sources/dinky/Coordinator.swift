@@ -114,6 +114,16 @@ final class Coordinator {
 
     // MARK: Events
 
+    /// Release a temporary tile before a session move, then apply the destination without animation.
+    func prepareRestorationMove(_ window: Window, to space: UInt64) {
+        if let old = placements[window.id]?.space {
+            edit(old) { $0.remove(window.id) }
+            placements[window.id]?.space = nil
+        }
+        animator.forget(window.id)
+        snap.insert(space)
+    }
+
     private func handle(_ event: WindowEvent) {
         // Detected here, not in the border manager, so hover focus stands down even with borders off.
         if MissionControl.shared.update(from: model) { borders?.missionControlChanged() }
@@ -215,6 +225,7 @@ final class Coordinator {
     /// while it is shown: minimized windows, windows of hidden apps and inactive tabs read as minimized.
     func track(_ window: Window) {
         AppState.shared.recovery.recordBeforeManaging(window)
+        guard !session.deferTiling(window) else { return }
         if placements[window.id] == nil {
             // AX only lists windows on a Space that is on screen; the rest are classified when theirs is.
             guard window.isNormal, isVisible(window.spaceID) else { return }
@@ -319,12 +330,13 @@ final class Coordinator {
     // MARK: Applying
 
     func flush() {
+        guard !session.awaitingStartup else { return }
         if enabled { restoreSession() }
         let keys = dirty
         dirty = []
         guard enabled else { return }
         for key in keys where isVisible(key) {
-            if session.pendingSpaces[key] != nil { dirty.insert(key); continue }
+            if session.isRestoring(on: key) { dirty.insert(key); continue }
             apply(key)
         }
     }

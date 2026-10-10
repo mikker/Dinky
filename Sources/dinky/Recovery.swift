@@ -2,8 +2,7 @@ import AppKit
 import DinkyLayout
 import DinkyPrivate
 
-// Restore untiled frames on disable, quit, and explicit recovery. Native Space membership stays as the
-// user left it. Inaccessible or failed windows stay journaled for a later explicit attempt. Main thread only.
+// Restore untiled frames and surviving original Spaces on disable, quit, and explicit recovery. Inaccessible or failed windows stay journaled for a later explicit attempt. Main thread only.
 final class Recovery {
     struct Entry: Codable {
         let id: UInt32
@@ -11,7 +10,7 @@ final class Recovery {
         let bundleID: String?
         var firstSeen: Date
         let frame: CGRect
-        let spaceID: UInt64  // Historical metadata; never a restore destination.
+        let spaceID: UInt64
         var displayUUID: String? = nil
         var displayVisibleFrame: CGRect? = nil
 
@@ -60,7 +59,7 @@ final class Recovery {
         record()
     }
 
-    /// Restores reachable untiled frames on current monitors. Native Spaces and focus stay unchanged.
+    /// Restores untiled frames and returns windows to surviving original Spaces without switching focus.
     /// Waits for the existing bounded frame batch; unfinished entries remain on disk.
     @discardableResult
     func restore() -> String {
@@ -68,17 +67,22 @@ final class Recovery {
         let displays = AppState.shared.displays
         displays.reconcile()
         return restore(windows: model.windows, displays: displays.displays.map(RecoveryDisplay.init),
-                       read: readWindow, write: writeFrames)
+                       read: readWindow, write: writeFrames, move: { id, space in
+                           var ids = [id]
+                           return dinky_move_windows_to_space(&ids, 1, space)
+                       })
     }
 
     /// The same restore policy with window reads and frame writes supplied by the caller for testing.
     @discardableResult
     func restore(windows: [UInt32: Window], displays: [RecoveryDisplay],
-                 read: (UInt32) -> RecoveryWindowState?, write: ([FrameJob]) -> [FrameResult]) -> String {
+                 read: (UInt32) -> RecoveryWindowState?, write: ([FrameJob]) -> [FrameResult],
+                 move: (UInt32, UInt64) -> Bool = { _, _ in false }) -> String {
         recording = false
         guard !entries.isEmpty else { return "nothing to restore" }
         var problems: [UInt32: String] = [:]
-        var targets: [UInt32: RecoveryWindowState] = [:]
+        var targets: [UInt32: UInt64] = [:]
+        var desiredFrames: [UInt32: CGRect] = [:]
         var jobs: [FrameJob] = []
         let total = entries.count
         var restored = 0
@@ -94,32 +98,49 @@ final class Recovery {
                 problems[entry.id] = "not on an available user Space"
                 continue
             }
-            guard display.currentSpace == state.space, state.isOnScreen else {
-                problems[entry.id] = "not on screen; kept for explicit recovery"
-                continue
-            }
-            guard let frame = recoveryFrame(entry.frame, from: entry.displayVisibleFrame, on: display.visibleFrame) else {
+            // A deleted original Space has no safe substitute: keep this window on its current Space.
+            let destination = displays.first { $0.userSpaces.contains(entry.spaceID) }
+            let targetSpace = destination == nil ? state.space : entry.spaceID
+            guard let frame = recoveryFrame(entry.frame, from: entry.displayVisibleFrame,
+                                            on: (destination ?? display).visibleFrame) else {
                 problems[entry.id] = "invalid saved frame or display bounds"
                 continue
             }
-            if state.frame.isClose(to: frame, within: 2) {
-                entries.removeValue(forKey: entry.id)
-                restored += 1
-            } else {
-                targets[entry.id] = state
+            targets[entry.id] = targetSpace
+            desiredFrames[entry.id] = frame
+            // Write while reachable, before returning a window to an inactive Space.
+            if display.currentSpace == state.space, state.isOnScreen, !state.frame.isClose(to: frame, within: 2) {
                 jobs.append(FrameJob(pid: entry.pid, id: entry.id, frame: frame))
             }
         }
-        let results = Dictionary(write(jobs).map { ($0.job.id, $0) }, uniquingKeysWith: { _, last in last })
-        for job in jobs {
-            // Verify Space membership as well as the requested frame; a late or refused write stays pending.
-            guard let result = results[job.id], result.job == job, result.got?.isClose(to: job.frame, within: 2) == true,
-                  let state = read(job.id), state.pid == job.pid, state.space == targets[job.id]?.space,
-                  state.frame.isClose(to: job.frame, within: 2) else {
-                problems[job.id] = "frame or Space not confirmed; kept for explicit recovery"
+        if !jobs.isEmpty { _ = write(jobs) }
+        for entry in entries.values.sorted(by: { $0.id < $1.id }) {
+            guard let target = targets[entry.id], let state = read(entry.id), state.pid == entry.pid,
+                  state.space != target else { continue }
+            if move(entry.id, target) != true {
+                problems[entry.id] = "move to original Space failed; kept for explicit recovery"
+            }
+        }
+        // No retry timer or Space switch. Events confirm asynchronous moves; unconfirmed work stays journaled.
+        let written = Set(jobs.map(\.id))
+        var arrivedJobs: [FrameJob] = []
+        for entry in entries.values {
+            guard let target = targets[entry.id], let frame = desiredFrames[entry.id],
+                  let state = read(entry.id), state.pid == entry.pid, state.space == target,
+                  displays.contains(where: { $0.currentSpace == target }), state.isOnScreen,
+                  !state.frame.isClose(to: frame, within: 2),
+                  !written.contains(entry.id) else { continue }
+            arrivedJobs.append(FrameJob(pid: entry.pid, id: entry.id, frame: frame))
+        }
+        if !arrivedJobs.isEmpty { _ = write(arrivedJobs) }
+        for entry in Array(entries.values) {
+            guard let target = targets[entry.id], let frame = desiredFrames[entry.id] else { continue }
+            guard problems[entry.id] == nil, let state = read(entry.id), state.pid == entry.pid,
+                  state.space == target, state.frame.isClose(to: frame, within: 2) else {
+                problems[entry.id] = problems[entry.id] ?? "frame or original Space not confirmed; kept for explicit recovery"
                 continue
             }
-            entries.removeValue(forKey: job.id)
+            entries[entry.id] = nil
             restored += 1
         }
         carried = Set(entries.keys)
@@ -132,6 +153,15 @@ final class Recovery {
         print("recovery: \(summary)")
         fflush(stdout)
         return summary
+    }
+
+    func returnSpaces(windows: [UInt32: Window], displays: [RecoveryDisplay]) -> [UInt32: UInt64] {
+        let available = Set(displays.flatMap { $0.userSpaces })
+        return entries.reduce(into: [:]) { result, pair in
+            let entry = pair.value
+            guard windows[entry.id]?.identity == entry.identity else { return }
+            result[entry.id] = available.contains(entry.spaceID) ? entry.spaceID : windows[entry.id]?.spaceID
+        }
     }
 
     // MARK: Journal
@@ -250,5 +280,5 @@ final class Recovery {
 
 }
 
-/// `dinky recover`: restores unfinished untiled frames while preserving current native Spaces.
+/// `dinky recover`: restores unfinished untiled frames and surviving original Spaces.
 func runRecover() -> Int32 { sendAndPrint("recover") }

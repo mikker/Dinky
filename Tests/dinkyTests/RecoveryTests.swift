@@ -8,7 +8,7 @@ struct RecoveryTests {
     private let original = CGRect(x: 100, y: 100, width: 800, height: 600)
     private let tiled = CGRect(x: 8, y: 46, width: 1694, height: 1058)
 
-    private func window(_ id: UInt32, space: UInt64 = 3, seen: Double = 1) -> Window {
+    private func window(_ id: UInt32, space: UInt64 = 815, seen: Double = 1) -> Window {
         var window = Window(identity: .init(id: id, pid: 10, firstSeen: Date(timeIntervalSince1970: seen)),
                             appName: "Test", bundleID: "test.app")
         window.frame = original
@@ -43,7 +43,7 @@ struct RecoveryTests {
         }
     }
 
-    @Test func `Restoration ignores the original Space and preserves the current native Space`() {
+    @Test func `A window already on its original Space restores its frame`() {
         let f = Fixture(), window = window(1)
         f.recovery.capture(window, display: display())
         var current = state()
@@ -61,7 +61,7 @@ struct RecoveryTests {
     }
 
     @Test func `Inactive Spaces stay untouched and can be restored by a later explicit attempt`() throws {
-        let f = Fixture(), window = window(1)
+        let f = Fixture(), window = window(1, space: 816)
         f.recovery.capture(window, display: display())
         var current = state(space: 816)
         var calls = 0
@@ -141,7 +141,7 @@ struct RecoveryTests {
     }
 
     @Test func `Monitor changes use current native Spaces to choose each restore monitor`() {
-        let f = Fixture(), one = window(1), two = window(2)
+        let f = Fixture(), one = window(1), two = window(2, space: 999)
         f.recovery.capture(one, display: display())
         f.recovery.capture(two, display: display())
         let external = RecoveryDisplay(uuid: "external", visibleFrame: CGRect(x: -3440, y: -1440, width: 3440, height: 1402),
@@ -184,7 +184,7 @@ struct RecoveryTests {
 
     @Test func `The first untiled frame is kept when subsequent observations are tiled`() throws {
         let f = Fixture()
-        var window = window(1)
+        var window = window(1, space: 3)
         f.recovery.capture(window, display: display())
         window.frame = tiled
         window.spaceID = 816
@@ -223,4 +223,54 @@ struct RecoveryTests {
         #expect(decoded.displayUUID == nil)
         #expect(decoded.displayVisibleFrame == nil)
     }
+    @Test func `Undo restores frames before moving back to an inactive original Space`() {
+        let f = Fixture(), window = window(1, space: 3)
+        f.recovery.capture(window, display: display())
+        var current = state()
+        var operations: [String] = []
+        f.recovery.restore(windows: [1: window], displays: [display()], read: { _ in current }, write: { jobs in
+            operations.append("frame")
+            current = state(frame: jobs[0].frame)
+            return jobs.map { FrameResult(job: $0, target: $0.frame, got: $0.frame) }
+        }, move: { id, target in
+            #expect(id == 1 && target == 3)
+            operations.append("space")
+            current = state(space: target, frame: current.frame, shown: false)
+            return true
+        })
+        #expect(operations == ["frame", "space"])
+        #expect(current.space == 3)
+        #expect(f.recovery.recoverable == 0)
+    }
+
+    @Test func `A deleted original Space keeps each window on its current Space`() {
+        let f = Fixture(), window = window(1, space: 700)
+        f.recovery.capture(window, display: display())
+        var current = state()
+        var moves = 0
+        f.recovery.restore(windows: [1: window], displays: [display()], read: { _ in current }, write: { jobs in
+            current = state(frame: jobs[0].frame)
+            return jobs.map { FrameResult(job: $0, target: $0.frame, got: $0.frame) }
+        }, move: { _, _ in moves += 1; return false })
+        #expect(moves == 0)
+        #expect(current.space == 815)
+        #expect(f.recovery.recoverable == 0)
+    }
+
+    @Test(arguments: [true, false]) func `Refused or unconfirmed undo moves remain journaled`(accepted: Bool) throws {
+        let f = Fixture(), window = window(1, space: 3)
+        f.recovery.capture(window, display: display())
+        var current = state(frame: original)
+        var moves = 0
+        f.recovery.restore(windows: [1: window], displays: [display()], read: { _ in current }, write: { _ in [] },
+                           move: { _, _ in moves += 1; return accepted })
+        #expect(moves == 1)
+        #expect(try f.journal().windows.count == 1)
+        current = state(space: 3, frame: original, shown: false)
+        f.recovery.restore(windows: [1: window], displays: [display()], read: { _ in current }, write: { _ in [] },
+                           move: { _, _ in moves += 1; return false })
+        #expect(moves == 1)
+        #expect(f.recovery.recoverable == 0)
+    }
+
 }
