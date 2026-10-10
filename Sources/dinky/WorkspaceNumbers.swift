@@ -191,7 +191,7 @@ final class WorkspaceNumbers {
             let space = dinky_window_space_id(id)
             if let target = binding[n], space == target {
                 restorationHistory.noteReturn(home.identity)
-                if recoveryState.confirmMove(home.identity, on: space) {
+                if recoveryState.confirmMove(home.identity, on: space, history: &restorationHistory) {
                     AppState.shared.coordinator?.model.refresh(id)
                 }
                 continue
@@ -200,6 +200,9 @@ final class WorkspaceNumbers {
             guard let target = binding[n], space != target,
                   model.display(containingSpace: space)?.userSpaces.contains(space) == true else { continue }
             guard recoveryState.beginMove(home.identity, to: target) else { continue }
+            if let window = AppState.shared.coordinator?.model.windows[id] {
+                AppState.shared.coordinator?.prepareRecoveryMove(window, to: target)
+            }
             targets[id] = target
         }
         guard !targets.isEmpty else { return }
@@ -215,7 +218,7 @@ final class WorkspaceNumbers {
         for (id, target) in targets where dinky_window_space_id(id) == target {
             arrived += 1
             if let home = recoveryHomes[id] {
-                _ = recoveryState.confirmMove(home.identity, on: target)
+                _ = recoveryState.confirmMove(home.identity, on: target, history: &restorationHistory)
                 restorationHistory.noteReturn(home.identity)
             }
             AppState.shared.coordinator?.model.refresh(id)
@@ -240,8 +243,11 @@ final class WorkspaceNumbers {
 
     func wasRestored(_ window: Window) -> Bool { restorationHistory.wasRestored(window.identity) }
 
-    /// Invalidate before tracking can consult replacement titles for tiling deferral.
-    func invalidateRecoveryTitle(_ window: Window) { recoveryState.invalidateTitle(window.identity) }
+    /// Confirm arrival before tracking can adopt a replacement onto the focused display.
+    func prepareRecoveryTracking(_ window: Window, titleChanged: Bool) {
+        if titleChanged { recoveryState.invalidateTitle(window.identity) }
+        _ = recoveryState.confirmMove(window.identity, on: window.spaceID, history: &restorationHistory)
+    }
 
     /// Coalesce window events after the model has applied their updates.
     func recoverAfterWindowEvent(_ event: WindowEvent) {

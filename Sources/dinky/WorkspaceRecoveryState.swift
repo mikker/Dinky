@@ -25,9 +25,11 @@ struct WorkspaceRecoveryState {
     }
     mutating func rejectMove(_ identity: Window.Identity) { moves.removeValue(forKey: identity) }
     /// A read or event confirms arrival. Other Spaces leave the request pending.
-    mutating func confirmMove(_ identity: Window.Identity, on space: UInt64) -> Bool {
+    mutating func confirmMove(_ identity: Window.Identity, on space: UInt64,
+                             history: inout WindowRestorationHistory) -> Bool {
         guard moves[identity] == space else { return false }
         moves.removeValue(forKey: identity)
+        history.noteReturn(identity)
         return true
     }
 }

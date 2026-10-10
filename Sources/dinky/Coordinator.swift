@@ -107,12 +107,25 @@ final class Coordinator {
 
     // MARK: Events
 
+    /// Release the temporary tile before an asynchronous recovery move. Arrival must not animate
+    /// from coordinates on the old display, which can move the window back onto that display's Space.
+    func prepareRecoveryMove(_ window: Window, to space: UInt64) {
+        if let old = placements[window.id]?.space {
+            edit(old) { $0.remove(window.id) }
+            placements[window.id]?.space = nil
+        }
+        animator.forget(window.id)
+        snap.insert(space)
+    }
+
     private func handle(_ event: WindowEvent) {
         // Detected here, not in the border manager, so hover focus stands down even with borders off.
         if MissionControl.shared.update(from: model) { borders?.missionControlChanged() }
         borders?.handle(event)
         if let window = event.window {
-            if event.kind == .windowTitle { AppState.shared.numbers.invalidateRecoveryTitle(window) }
+            if event.change != .removed {
+                AppState.shared.numbers.prepareRecoveryTracking(window, titleChanged: event.kind == .windowTitle)
+            }
             event.change == .removed ? forget(window.id) : track(window)
             if [.windowMove, .windowResize].contains(event.kind) { noteFrameChange(of: window.id) }
         }
