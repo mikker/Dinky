@@ -78,6 +78,31 @@ windows from the current or a previous session. Recovery leaves dinky disabled
 until `dinky enable on`. Closed windows are discarded; new windows do not
 inherit their recovery records.
 
+## Session restoration
+
+dinky saves the latest managed arrangement in `session.json`, separately from
+the original untiled frames in `journal.json`. On restart, it restores tree
+order, container layouts, split ratios and fullscreen state.
+Floating choices and frames are saved too. Current window rules and workspace
+layout settings take precedence.
+
+Windows stay on their current native macOS Spaces. A window moved to another
+Space while dinky is off keeps its new Space. Closed windows, windows from a new app
+process, and saved Spaces that no longer exist are skipped. dinky does not reopen
+apps or create Spaces to restore a session.
+
+Trees restore before their first tiling pass. Inactive Spaces restore when you
+visit them; hidden and minimized floating windows restore when shown. Normal
+window events trigger restoration, without switching desktops or polling for
+windows. Frames adapt to the current monitor. A floating frame is attempted once; failed
+writes are logged.
+
+Changes are saved atomically after a half-second event burst, and immediately
+before disabling or quitting. Restoring untiled frames does not overwrite the
+saved managed arrangement. Tiling animation frames are not stored. Like the
+recovery journal, the session file identifies surviving windows by window ID,
+owner process and app launch date; it does not match recreated windows by title.
+
 ## Scripting
 
 The queries follow [AeroSpace](https://nikitabobko.github.io/AeroSpace/commands)'s

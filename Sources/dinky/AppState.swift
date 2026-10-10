@@ -72,6 +72,7 @@ final class AppState {
     /// menu's Enabled item, `dinky recover` and quitting all come through here.
     @discardableResult
     func setEnabled(_ on: Bool) -> String {
+        if on { coordinator?.session.resume() } else { coordinator?.session.pause() }
         if on { recovery.resume() }
         enabled = on
         propagateEnabled()

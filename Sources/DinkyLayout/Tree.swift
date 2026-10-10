@@ -13,14 +13,14 @@ public enum Orientation: Equatable, Sendable {
 
 /// How a container picks its axis: fixed, or `auto`, along the longer side of its rectangle (a square runs
 /// horizontally). `auto` is resolved wherever the rectangle is known, see `Container.axis(in:)`.
-public enum ContainerOrientation: Equatable, Sendable {
+public enum ContainerOrientation: Equatable, Sendable, Codable {
     case horizontal, vertical, auto
 
     public init(_ axis: Orientation) { self = axis == .horizontal ? .horizontal : .vertical }
 }
 
 /// How a container shows its children: side by side, or stacked with neighbours peeking out.
-public enum LayoutMode: Equatable, Sendable {
+public enum LayoutMode: Equatable, Sendable, Codable {
     case tiles, accordion
 }
 
@@ -44,7 +44,7 @@ public enum Direction: Equatable, Sendable {
 }
 
 /// A node in the tree: a window leaf or a container.
-public indirect enum Node: Equatable, Sendable {
+public indirect enum Node: Equatable, Sendable, Codable {
     case window(WindowID)
     case container(Container)
 
@@ -58,7 +58,7 @@ public indirect enum Node: Equatable, Sendable {
 }
 
 /// A container: ordered children with ratios that sum to 1.
-public struct Container: Equatable, Sendable {
+public struct Container: Equatable, Sendable, Codable {
     public var orientation: ContainerOrientation
     public var mode: LayoutMode
     /// Whether a `layout` command chose the orientation, so switching to accordion keeps it.

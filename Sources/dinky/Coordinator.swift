@@ -9,6 +9,8 @@ import DinkyPrivate
 struct Placement {
     let floating: Bool
     var space: UInt64?
+    var floatingOverride: Bool? = nil
+    var lastKnownSpace: UInt64? = nil
 }
 
 // The serialized owner of layout state: one Workspace per Space, keyed by Space ID, fed by the window and
@@ -26,6 +28,7 @@ final class Coordinator {
     let displays: DisplayModel
     private(set) var config: Config
     let applier = FrameApplier()
+    let session = Session()
     private lazy var animator = Animator(applier: applier)
     private var borders: BorderManager?
     func isBorderWindow(_ id: WindowID) -> Bool { borders?.isBorder(id) ?? false }
@@ -84,8 +87,10 @@ final class Coordinator {
             return
         }
         beforeTiling()
+        session.start(coordinator: self)
         update(config: config)
         reconcile()
+        session.saveSoon()
     }
 
     func update(config: Config) {
@@ -104,6 +109,7 @@ final class Coordinator {
         fitToDisplays()
         dirty.formUnion(workspaces.keys)
         flush()
+        session.saveSoon()
     }
 
     // MARK: Events
@@ -115,6 +121,8 @@ final class Coordinator {
         if let window = event.window {
             event.change == .removed ? forget(window.id) : track(window)
             if [.windowMove, .windowResize].contains(event.kind) { noteFrameChange(of: window.id) }
+            if [.windowMove, .windowResize].contains(event.kind),
+               placements[window.id]?.floating == true || !settings(for: window.spaceID).tiling { session.saveSoon() }
         }
         if [.frontApp, .windowReorder, .windowCreate].contains(event.kind) { syncFocus() }
         if [.frontApp, .windowReorder].contains(event.kind) {
@@ -140,6 +148,7 @@ final class Coordinator {
         syncFocus()
         dirty.formUnion(workspaces.keys)
         flush()
+        session.saveSoon()
     }
 
     /// Forgets every minimum size learned and re-applies every tree, so windows are asked for their tiles again.
@@ -212,8 +221,14 @@ final class Coordinator {
             // Once, on the first classification attempt, not again on its retries.
             if attempts[window.id] == nil { noteFirstShowing(window) }
             guard let classification = classify(window) else { return }
-            placements[window.id] = Placement(floating: classification.floating, space: nil)
+            placements[window.id] = Placement(floating: classification.floating, space: nil,
+                                               floatingOverride: session.floatingOverride(for: window))
+            session.saveSoon()
             if !classification.runsRules, adopt(window) { return }
+        }
+        if placements[window.id]?.lastKnownSpace != window.spaceID {
+            placements[window.id]?.lastKnownSpace = window.spaceID
+            session.saveSoon()
         }
         guard !adopting.contains(window.id), !placements[window.id]!.floating else { return }
         let old = placements[window.id]!.space
@@ -231,6 +246,7 @@ final class Coordinator {
     }
 
     private func forget(_ id: WindowID) {
+        session.saveSoon()
         attempts[id] = nil
         adoptTargets[id] = nil
         adopting.remove(id)
@@ -292,8 +308,10 @@ final class Coordinator {
     func edit<T>(_ key: UInt64, _ change: (inout Workspace) -> T) -> T? {
         guard var workspace = workspaces[key] else { return nil }
         let before = workspace.layout()
+        let saved = WorkspaceSnapshot(workspace)
         let result = change(&workspace)
         workspaces[key] = workspace
+        if WorkspaceSnapshot(workspace) != saved { session.saveSoon() }
         if workspace.layout() != before { dirty.insert(key) }
         return result
     }
@@ -301,10 +319,42 @@ final class Coordinator {
     // MARK: Applying
 
     func flush() {
+        if enabled { restoreSession() }
         let keys = dirty
         dirty = []
         guard enabled else { return }
-        for key in keys where isVisible(key) { apply(key) }
+        for key in keys where isVisible(key) {
+            if session.pendingSpaces[key] != nil { dirty.insert(key); continue }
+            apply(key)
+        }
+    }
+
+    /// Restore trees before their first frame write. Inactive Spaces are restored on their first ordinary visit.
+    private func restoreSession() {
+        guard !session.pendingSpaces.isEmpty || !session.pendingWindows.isEmpty else { return }
+        session.prune(windows: model.windows, spaces: Set(displays.displays.flatMap(\.userSpaces)))
+        for key in Array(session.pendingSpaces.keys) {
+            guard settings(for: key).tiling else { session.discardLayout(on: key); continue }
+            guard isVisible(key), var workspace = workspaces[key] else { continue }
+            let held = Set(heldTabs.keys).union(adopting)
+            if session.restore(key, workspace: &workspace, windows: model.windows, placements: placements, held: held) == .restored {
+                workspaces[key] = workspace
+                snap.insert(key)
+                dirty.insert(key)
+                session.saveSoon()
+            }
+        }
+        let jobs = session.floatingJobs(windows: model.windows, placements: placements,
+                                        displays: displays.displays.map(RecoveryDisplay.init), untiledSpaces: untiledSpaces)
+        guard !jobs.isEmpty else { return }
+        applier.apply(Layout(frames: Dictionary(uniqueKeysWithValues: jobs.map { ($0.id, $0.frame) }), order: jobs.map(\.id)),
+                      pids: Dictionary(uniqueKeysWithValues: jobs.map { ($0.id, $0.pid) }), raiseWindows: false) { [weak self] results in
+            DispatchQueue.main.async { self?.session.finished(jobs, results: results) }
+        }
+    }
+
+    var untiledSpaces: Set<UInt64> {
+        Set(displays.displays.flatMap(\.userSpaces).filter { !settings(for: $0).tiling })
     }
 
     /// Whether the Space is a display's current one.

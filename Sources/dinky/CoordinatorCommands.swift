@@ -50,7 +50,8 @@ extension Coordinator {
         guard let placement = placements[id], let window = model.windows[id] else { return false }
         if let space = placement.space { edit(space) { $0.remove(id) } }
         heldTabs[id] = nil
-        placements[id] = Placement(floating: floating, space: nil)
+        placements[id] = Placement(floating: floating, space: nil, floatingOverride: floating)
+        session.saveSoon()
         track(window)
         flush()
         return true

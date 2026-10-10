@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Tiling
+
+- Restarting restores saved layout order, split ratios, fullscreen state and floating frames for surviving windows on their current native Spaces. Inactive Spaces restore on their next visit. Current rules and layout settings take precedence.
+
 ### Fixes
 
 - Quitting, disabling, and explicit recovery preserve each window's current native Space. Untiled frames are restored within the current monitor. Inaccessible or failed restores remain available for an explicit later attempt.
