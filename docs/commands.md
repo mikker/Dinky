@@ -51,7 +51,7 @@ and exits 1 on errors or when it isn't running. CLI-only commands:
 |---|---|
 | `app` | Run the app in the foreground, logging to the terminal. |
 | `doctor [--config <path>]` | Check the config and macOS settings, and that no other tiling window manager is running. |
-| `recover` | Restore windows left tiled by a crash. |
+| `recover` | Restore unfinished window frames and surviving original Spaces. |
 | `debug events\|windows` | Print window events or windows, without the app. |
 | `version`, `-v`, `--version` | Print the version and build number. |
 
@@ -66,10 +66,44 @@ printf 'workspace 2\n' | nc -U "$TMPDIR/dinky.sock"
 
 ## Recovery
 
-dinky journals each window's original frame and Space before tiling it. `enable
-off`, quitting, `kill` and logging out put them all back. After a crash, the
-menu offers to restore them (or `dinky recover`); dinky stays off until `dinky
-enable on`.
+dinky saves each window's untiled frame before managing it. `enable off`, quitting,
+`kill` and logging out return windows to their original native Spaces when those
+Spaces still exist. If an original Space was deleted or its display is unavailable,
+the window stays on its current Space. Frames are translated relative to the
+destination monitor and clamped within its usable bounds.
+
+Unreachable frames and unconfirmed Space moves stay in the journal. Dinky does not switch Spaces to restore them.
+Show the windows and use `dinky recover` to try again. The menu lists unfinished
+windows from the current or a previous session. Recovery leaves dinky disabled
+until `dinky enable on`. Closed windows are discarded; new windows do not
+inherit their recovery records.
+
+## Session restoration
+
+dinky saves the latest managed arrangement in `session.json`, separately from
+the original untiled frames in `journal.json`. On restart, it restores tree
+order, container layouts, split ratios and fullscreen state.
+Floating choices and frames are saved too. Current window rules and workspace
+layout settings take precedence.
+
+On startup, dinky reverses its own undo moves to restore the managed arrangement.
+A window moved elsewhere while dinky is off keeps its new Space. If a saved Space
+was deleted, dinky uses the replacement Space bound to the saved workspace number,
+after its normal workspace arrangement. If no replacement exists, restoration is
+skipped. Older snapshots without workspace numbers cannot recover deleted Spaces.
+Closed windows and windows from a new app process are skipped; apps are not reopened.
+
+Trees restore before their first tiling pass. Inactive Spaces restore when you
+visit them; hidden and minimized floating windows restore when shown. Normal
+window events trigger restoration, without switching desktops or polling for
+windows. Frames adapt to the current monitor. A floating frame is attempted once; failed
+writes are logged.
+
+Changes are saved atomically after a half-second event burst, and immediately
+before disabling or quitting. Restoring untiled frames does not overwrite the
+saved managed arrangement. Tiling animation frames are not stored. Like the
+recovery journal, the session file identifies surviving windows by window ID,
+owner process and app launch date; it does not match recreated windows by title.
 
 ## Scripting
 

@@ -42,7 +42,8 @@ extension Coordinator {
             }
         }
         let floating = kind != .normal || !resizable.boolValue
-            || (floats ?? (config.floatWindowsWithoutFullscreen && lacksFullscreen(element, bundleID: window.bundleID)))
+            || (floats ?? session.floatingOverride(for: window)
+                ?? (config.floatWindowsWithoutFullscreen && lacksFullscreen(element, bundleID: window.bundleID)))
         return (floating, runsRules)
     }
 }
