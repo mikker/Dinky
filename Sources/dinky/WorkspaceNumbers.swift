@@ -29,7 +29,7 @@ final class WorkspaceNumbers {
     private var restorationHistory = WindowRestorationHistory()
     private var recoveryQueued = false
     private var cleanupNeeded = false
-    private var recoveryTitles: [Window.Identity: String] = [:]
+    private var recoveryState = WorkspaceRecoveryState()
 
     var count: Int { AppState.shared.config.workspaces }
 
@@ -66,7 +66,7 @@ final class WorkspaceNumbers {
                 recoveryStarted = Date()
                 recoveryHomes = homes
                 restorationHistory.beginDisplayChange()
-                recoveryTitles.removeAll()
+                recoveryState.reset()
             }
             arrangeSoon()
         }
@@ -175,9 +175,13 @@ final class WorkspaceNumbers {
         if let windows = AppState.shared.coordinator?.model.windows {
             // A closed original without a replacement in this event batch must not claim a later new window.
             recoveryHomes = recoveryHomes.filter { windows[$0.key]?.identity == $0.value.identity }
+            let destinations = Dictionary(uniqueKeysWithValues: recoveryHomes.values.compactMap { home in
+                binding[home.workspace].map { (home.identity, $0) }
+            })
+            recoveryState.retain(live: Set(windows.values.map(\.identity)), destinations: destinations)
             if recoveryHomes.isEmpty {
                 recoveryStarted = nil
-                recoveryTitles.removeAll()
+                recoveryState.reset()
             }
         }
         for (id, home) in recoveryHomes {
@@ -187,27 +191,36 @@ final class WorkspaceNumbers {
             let space = dinky_window_space_id(id)
             if let target = binding[n], space == target {
                 restorationHistory.noteReturn(home.identity)
+                if recoveryState.confirmMove(home.identity, on: space) {
+                    AppState.shared.coordinator?.model.refresh(id)
+                }
                 continue
             }
             // A window on a full-screen Space, or gone, stays put.
             guard let target = binding[n], space != target,
                   model.display(containingSpace: space)?.userSpaces.contains(space) == true else { continue }
+            guard recoveryState.beginMove(home.identity, to: target) else { continue }
             targets[id] = target
         }
         guard !targets.isEmpty else { return }
         for (target, moving) in Dictionary(grouping: targets.keys, by: { targets[$0]! }) {
             var ids = moving
-            _ = dinky_move_windows_to_space(&ids, Int32(ids.count), target)
+            if !dinky_move_windows_to_space(&ids, Int32(ids.count), target) {
+                for id in ids {
+                    if let home = recoveryHomes[id] { recoveryState.rejectMove(home.identity) }
+                }
+            }
         }
-        let arrived = { targets.filter { dinky_window_space_id($0.key) == $0.value }.count }
-        _ = waitUntil(1) { arrived() == targets.count }
+        var arrived = 0
         for (id, target) in targets where dinky_window_space_id(id) == target {
+            arrived += 1
             if let home = recoveryHomes[id] {
+                _ = recoveryState.confirmMove(home.identity, on: target)
                 restorationHistory.noteReturn(home.identity)
             }
             AppState.shared.coordinator?.model.refresh(id)
         }
-        print("workspaces: returned \(arrived()) of \(targets.count) windows a display change moved off their workspace")
+        print("workspaces: requested return of \(targets.count) displaced windows; \(arrived) already on their workspace")
     }
 
     /// Keep displaced windows out of the arrival workspace's layout until their home is ready.
@@ -227,14 +240,20 @@ final class WorkspaceNumbers {
 
     func wasRestored(_ window: Window) -> Bool { restorationHistory.wasRestored(window.identity) }
 
+    /// Invalidate before tracking can consult replacement titles for tiling deferral.
+    func invalidateRecoveryTitle(_ window: Window) { recoveryState.invalidateTitle(window.identity) }
+
     /// Coalesce window events after the model has applied their updates.
     func recoverAfterWindowEvent(_ event: WindowEvent) {
-        guard let window = event.window else { return }
-        if event.change == .removed {
-            homes.removeValue(forKey: window.id)
-            if recoveryStarted != nil { cleanupNeeded = true }
-        } else {
-            noteHome(window, refreshTitle: event.kind == .windowTitle)
+        guard event.window != nil || [.spaceChange, .spaceCreated, .spaceDestroyed].contains(event.kind) else { return }
+        if let window = event.window {
+            if event.change == .removed {
+                homes.removeValue(forKey: window.id)
+                recoveryState.remove(window.identity)
+                if recoveryStarted != nil { cleanupNeeded = true }
+            } else {
+                noteHome(window, refreshTitle: event.kind == .windowTitle)
+            }
         }
         if let model = AppState.shared.coordinator?.model {
             restorationHistory.retain(Set(model.windows.values.map(\.identity)))
@@ -254,9 +273,9 @@ final class WorkspaceNumbers {
     }
 
     private func replacementTitle(_ window: Window) -> String? {
-        if let title = recoveryTitles[window.identity] { return title }
+        if let title = recoveryState.titles[window.identity] { return title }
         guard let title = windowTitle(window) else { return nil }
-        recoveryTitles[window.identity] = title
+        recoveryState.cacheTitle(title, for: window.identity)
         return title
     }
 

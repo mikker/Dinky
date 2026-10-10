@@ -112,6 +112,7 @@ final class Coordinator {
         if MissionControl.shared.update(from: model) { borders?.missionControlChanged() }
         borders?.handle(event)
         if let window = event.window {
+            if event.kind == .windowTitle { AppState.shared.numbers.invalidateRecoveryTitle(window) }
             event.change == .removed ? forget(window.id) : track(window)
             if [.windowMove, .windowResize].contains(event.kind) { noteFrameChange(of: window.id) }
         }
