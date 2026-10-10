@@ -51,7 +51,7 @@ and exits 1 on errors or when it isn't running. CLI-only commands:
 |---|---|
 | `app` | Run the app in the foreground, logging to the terminal. |
 | `doctor [--config <path>]` | Check the config and macOS settings, and that no other tiling window manager is running. |
-| `recover` | Restore windows left tiled by a crash. |
+| `recover` | Restore unfinished window frames without changing native Spaces. |
 | `debug events\|windows` | Print window events or windows, without the app. |
 | `version`, `-v`, `--version` | Print the version and build number. |
 
@@ -66,10 +66,17 @@ printf 'workspace 2\n' | nc -U "$TMPDIR/dinky.sock"
 
 ## Recovery
 
-dinky journals each window's original frame and Space before tiling it. `enable
-off`, quitting, `kill` and logging out put them all back. After a crash, the
-menu offers to restore them (or `dinky recover`); dinky stays off until `dinky
-enable on`.
+dinky saves each window's untiled frame before managing it. `enable off`, quitting,
+`kill` and logging out restore reachable frames on the window's current monitor.
+Windows keep their current native macOS Spaces. Saved positions are translated
+relative to the current monitor and clamped within its usable bounds.
+
+Windows on inactive Spaces, hidden or minimized windows, and failed frame
+restores stay in the journal. Dinky does not switch Spaces to restore them.
+Show the windows and use `dinky recover` to try again. The menu lists unfinished
+windows from the current or a previous session. Recovery leaves dinky disabled
+until `dinky enable on`. Closed windows are discarded; new windows do not
+inherit their recovery records.
 
 ## Scripting
 

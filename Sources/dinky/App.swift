@@ -184,7 +184,7 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(enabled)
         let recoverable = state.recovery.recoverable
         if recoverable > 0 {
-            menu.addItem(item("Restore \(recoverable) windows from the previous session", "recover"))
+            menu.addItem(item("Restore \(recoverable) unfinished windows", "recover"))
         }
         menu.addItem(.separator())
         let updates = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates(_:)), keyEquivalent: "")

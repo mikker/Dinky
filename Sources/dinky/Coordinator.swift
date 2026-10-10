@@ -63,7 +63,7 @@ final class Coordinator {
         self.config = config
     }
 
-    func start() {
+    func start(beforeTiling: () -> Void = {}) {
         model.observe { [weak self] event in self?.handle(event) }
         animator.onArrive = { [weak self] ids in self?.borders?.arrived(ids) }
         var known = Set(displays.displays.map(\.uuid))
@@ -83,6 +83,7 @@ final class Coordinator {
             fputs("coordinator: no WindowServer events\n", stderr)
             return
         }
+        beforeTiling()
         update(config: config)
         reconcile()
     }
@@ -204,6 +205,7 @@ final class Coordinator {
     /// Classifies a window the first time it is on screen, then keeps it in the tree of its current Space
     /// while it is shown: minimized windows, windows of hidden apps and inactive tabs read as minimized.
     func track(_ window: Window) {
+        AppState.shared.recovery.recordBeforeManaging(window)
         if placements[window.id] == nil {
             // AX only lists windows on a Space that is on screen; the rest are classified when theirs is.
             guard window.isNormal, isVisible(window.spaceID) else { return }

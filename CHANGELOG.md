@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Quitting, disabling, and explicit recovery preserve each window's current native Space. Untiled frames are restored within the current monitor. Inaccessible or failed restores remain available for an explicit later attempt.
+
 ## 0.15
 
 ### Tiling
