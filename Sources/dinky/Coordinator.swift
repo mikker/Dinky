@@ -107,11 +107,25 @@ final class Coordinator {
 
     // MARK: Events
 
+    /// Release the temporary tile before an asynchronous recovery move. Arrival must not animate
+    /// from coordinates on the old display, which can move the window back onto that display's Space.
+    func prepareRecoveryMove(_ window: Window, to space: UInt64) {
+        if let old = placements[window.id]?.space {
+            edit(old) { $0.remove(window.id) }
+            placements[window.id]?.space = nil
+        }
+        animator.forget(window.id)
+        snap.insert(space)
+    }
+
     private func handle(_ event: WindowEvent) {
         // Detected here, not in the border manager, so hover focus stands down even with borders off.
         if MissionControl.shared.update(from: model) { borders?.missionControlChanged() }
         borders?.handle(event)
         if let window = event.window {
+            if event.change != .removed {
+                AppState.shared.numbers.prepareRecoveryTracking(window, titleChanged: event.kind == .windowTitle)
+            }
             event.change == .removed ? forget(window.id) : track(window)
             if [.windowMove, .windowResize].contains(event.kind) { noteFrameChange(of: window.id) }
         }
@@ -124,6 +138,7 @@ final class Coordinator {
                 self?.flush()
             }
         }
+        AppState.shared.numbers.recoverAfterWindowEvent(event)
         flush()
     }
 
@@ -204,6 +219,15 @@ final class Coordinator {
     /// Classifies a window the first time it is on screen, then keeps it in the tree of its current Space
     /// while it is shown: minimized windows, windows of hidden apps and inactive tabs read as minimized.
     func track(_ window: Window) {
+        if AppState.shared.numbers.deferTiling(window) {
+            // Release the old tile without classifying or adopting the window on its temporary Space.
+            if let space = placements[window.id]?.space {
+                edit(space) { $0.remove(window.id) }
+                placements[window.id]?.space = nil
+                animator.forget(window.id)
+            }
+            return
+        }
         if placements[window.id] == nil {
             // AX only lists windows on a Space that is on screen; the rest are classified when theirs is.
             guard window.isNormal, isVisible(window.spaceID) else { return }

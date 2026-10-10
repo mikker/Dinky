@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Document windows keep their workspace when a display is disconnected, including hidden and minimized windows. Windows that an app replaces during the display change return when their process and title identify them uniquely. Recovering windows stay out of temporary workspace layouts and keep their workspace when first shown after reconnecting. Empty Spaces left by temporary replacement windows are removed after recovery.
+
 ## 0.15
 
 ### Tiling

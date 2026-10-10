@@ -25,6 +25,9 @@ struct Window {
     var id: UInt32 { identity.id }
     var pid: pid_t { identity.pid }
 
+    /// Document windows keep their workspace while hidden, minimized or in an inactive native tab.
+    var isWorkspaceWindow: Bool { level == 0 && isDocument }
+
     // Tileable: normal layer, on screen, visible (not minimized), a document window rather than a sheet,
     // panel or popup.
     var isNormal: Bool { level == 0 && isOrderedIn && isVisible && isDocument }

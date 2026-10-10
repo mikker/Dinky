@@ -17,6 +17,7 @@ extension Coordinator {
     /// out of the trees meanwhile. False if it stays where the app put it.
     func adopt(_ window: Window) -> Bool {
         guard let target = adoptTargets.removeValue(forKey: window.id),
+              !AppState.shared.numbers.wasRestored(window),
               let display = displays.displays.first(where: { $0.uuid == target }),
               let current = displays.display(containingSpace: window.spaceID), current.uuid != display.uuid,
               current.userSpaces.contains(window.spaceID), display.userSpaces.contains(display.currentSpaceID)
