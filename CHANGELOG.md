@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Switching workspaces no longer retiles everything. Before, each switch re-read every window and rewrote the frames of every window on the workspace you landed on, which made apps redraw, slowed the computer, and sometimes glided windows into place. Now a switch only checks the windows of the workspace it lands on, and writes them, without gliding, only if something moved them while it was out of sight.
+- A change made to a workspace you are not looking at, such as a window closing there, is applied when you switch to it instead of being forgotten.
+
 ## 0.18
 
 ### Key bindings

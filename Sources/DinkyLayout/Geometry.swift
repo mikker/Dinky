@@ -53,6 +53,12 @@ public struct Layout: Equatable, Sendable {
 
     /// Equal when windows get the same frames in the same order; container rects follow from those.
     public static func == (a: Layout, b: Layout) -> Bool { a.frames == b.frames && a.order == b.order }
+
+    /// Whether every window is where this layout puts it, to within `tolerance` points. A window `actual` has no
+    /// frame for counts as out of place.
+    public func isPlaced(in actual: [WindowID: CGRect], within tolerance: CGFloat) -> Bool {
+        frames.allSatisfy { id, frame in actual[id]?.isClose(to: frame, within: tolerance) ?? false }
+    }
 }
 
 extension Container {

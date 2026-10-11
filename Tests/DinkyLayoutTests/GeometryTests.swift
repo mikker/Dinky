@@ -159,3 +159,26 @@ struct FullscreenTests {
         #expect(ws.fullscreen == nil)
     }
 }
+
+struct PlacementTests {
+    @Test func `Windows on their tiles are placed`() {
+        let layout = workspace(3).layout()
+        #expect(layout.isPlaced(in: layout.frames, within: 0))
+        let nudged = layout.frames.mapValues { $0.offsetBy(dx: 1.5, dy: -1.5) }
+        #expect(layout.isPlaced(in: nudged, within: 2))
+        #expect(!layout.isPlaced(in: nudged, within: 1))
+    }
+
+    @Test func `A window off its tile or missing is not placed`() {
+        let layout = workspace(2).layout()
+        var actual = layout.frames
+        actual[2] = actual[2]!.offsetBy(dx: 40, dy: 0)
+        #expect(!layout.isPlaced(in: actual, within: 2))
+        actual[2] = nil
+        #expect(!layout.isPlaced(in: actual, within: 2))
+    }
+
+    @Test func `An empty layout is placed`() {
+        #expect(workspace(0).layout().isPlaced(in: [:], within: 2))
+    }
+}

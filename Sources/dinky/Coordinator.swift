@@ -66,13 +66,14 @@ final class Coordinator {
     func start() {
         model.observe { [weak self] event in self?.handle(event) }
         animator.onArrive = { [weak self] ids in self?.borders?.arrived(ids) }
-        var known = Set(displays.displays.map(\.uuid))
+        var known = displays.displays
         displays.observe { [weak self] displays in
             guard let self else { return }
-            let now = Set(displays.displays.map(\.uuid))
-            if now != known { snap.formUnion(workspaces.keys) }
-            known = now
-            reconcile()
+            let before = known
+            known = displays.displays
+            if Set(known.map(\.uuid)) != Set(before.map(\.uuid)) { snap.formUnion(workspaces.keys) }
+            // Switching Space is not worth re-reading every window and rewriting every tree.
+            if Self.onlySwitchedSpaces(from: before, to: known) { spacesShown(before: before) } else { reconcile() }
         }
         // A hidden app's windows can read as shown when their hide event arrives; re-read them once it is hidden.
         let center = NSWorkspace.shared.notificationCenter
@@ -138,6 +139,39 @@ final class Coordinator {
         workspaces = workspaces.filter { displays.display(containingSpace: $0.key) != nil || !$0.value.windows.isEmpty }
         syncFocus()
         dirty.formUnion(workspaces.keys)
+        flush()
+    }
+
+    /// Whether the displays differ only in the Space each shows: the same displays, frames and Spaces.
+    private static func onlySwitchedSpaces(from before: [Display], to now: [Display]) -> Bool {
+        before.count == now.count && zip(before, now).allSatisfy { a, b in
+            a.uuid == b.uuid && a.id == b.id && a.frame == b.frame && a.isMain == b.isMain
+                && a.spaces == b.spaces && a.userSpaces == b.userSpaces
+        }
+    }
+
+    /// Brings the trees of Spaces just switched to up to date, and nothing else. A tree is written when it
+    /// changed while its Space was hidden, or when a window is not on its tile (an app moved it, as can happen
+    /// off screen), and then at once rather than gliding there: the glide would only show the mess.
+    private func spacesShown(before: [Display]) {
+        let hidden = Set(before.map(\.currentSpaceID))
+        for display in displays.displays where !hidden.contains(display.currentSpaceID) {
+            let key = display.currentSpaceID
+            // Windows that were never on screen are classified now that their Space is.
+            for id in dinky_space_window_ids(key, false).map(\.uint32Value) {
+                guard var window = model.windows[id] else { continue }
+                if window.spaceID != key { model.refresh(id); window = model.windows[id] ?? window }
+                track(window)
+            }
+            guard var workspace = workspaces[key] else { continue }
+            workspace.minimumSizes = minimumSizes(in: workspace)
+            let actual = Dictionary(uniqueKeysWithValues: workspace.windows.map { ($0, dinky_window_info($0).frame) })
+            if dirty.contains(key) || !workspace.layout().isPlaced(in: actual, within: 2) {
+                dirty.insert(key)
+                snap.insert(key)
+            }
+        }
+        syncFocus()
         flush()
     }
 
@@ -319,7 +353,8 @@ final class Coordinator {
 
     func flush() {
         let keys = dirty
-        dirty = []
+        // A tree on a hidden Space waits for it to be shown; `spacesShown` writes it then.
+        dirty = keys.filter { !isVisible($0) && workspaces[$0] != nil }
         guard enabled else { return }
         for key in keys where isVisible(key) { apply(key) }
     }
