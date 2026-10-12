@@ -269,6 +269,16 @@ struct ConfigTests {
         assertError("[accordion]\norientation = 'sideways'\n", path: "accordion.orientation", line: 2, contains: "'auto', 'keep'")
     }
 
+    @Test func `Negative sizes fail`() {
+        assertError("[gaps]\ninner = -4\n", path: "gaps.inner", line: 2, contains: "0 or more")
+        assertError("[gaps]\ninner = { horizontal = 8, vertical = -1 }\n", path: "gaps.inner.vertical", line: 2, contains: "0 or more")
+        assertError("[gaps]\nouter = -8\n", path: "gaps.outer", line: 2, contains: "0 or more")
+        assertError("[gaps]\nouter = { top = 44, left = -8 }\n", path: "gaps.outer.left", line: 2, contains: "0 or more")
+        assertError("[display.main.gaps]\nouter = -8\n", path: "display.main.gaps.outer", line: 2, contains: "0 or more")
+        assertError("[accordion]\npadding = -5\n", path: "accordion.padding", line: 2, contains: "0 or more")
+        assertError("[borders]\nwidth = -2\n", path: "borders.width", line: 2, contains: "0 or more")
+    }
+
     @Test func accordion() throws {
         let accordion = try Config.parse("[accordion]\npadding = 12\norientation = 'keep'\n").accordion
         #expect(accordion.padding == 12)

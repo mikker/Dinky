@@ -49,23 +49,30 @@ public struct GapsPatch: Equatable {
     init(_ t: Table) throws {
         if t.isTable("inner") {
             let inner = try t.table("inner")!
-            horizontal = try inner.int("horizontal")
-            vertical = try inner.int("vertical")
+            horizontal = try Self.points(inner, "horizontal")
+            vertical = try Self.points(inner, "vertical")
             try inner.done()
-        } else if let both = try t.int("inner") {
+        } else if let both = try Self.points(t, "inner") {
             (horizontal, vertical) = (both, both)
         }
         if t.isTable("outer") {
             let outer = try t.table("outer")!
-            top = try outer.int("top")
-            bottom = try outer.int("bottom")
-            left = try outer.int("left")
-            right = try outer.int("right")
+            top = try Self.points(outer, "top")
+            bottom = try Self.points(outer, "bottom")
+            left = try Self.points(outer, "left")
+            right = try Self.points(outer, "right")
             try outer.done()
-        } else if let all = try t.int("outer") {
+        } else if let all = try Self.points(t, "outer") {
             (top, bottom, left, right) = (all, all, all, all)
         }
         try t.done()
+    }
+
+    /// A gap in points, which can't be negative.
+    private static func points(_ t: Table, _ key: String) throws -> Int? {
+        guard let value = try t.int(key) else { return nil }
+        guard value >= 0 else { throw ConfigError(path: t.path(key), "must be 0 or more") }
+        return value
     }
 }
 
