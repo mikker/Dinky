@@ -64,6 +64,9 @@ struct GapsTests {
         assertError("[workspace-to-display]\nfive = 'main'\n", path: "workspace-to-display.five", line: 2, contains: "not a workspace number")
         assertError("[workspace-to-display]\n1 = ''\n", path: "workspace-to-display.1", line: 2, contains: "can't be empty")
         assertError("[workspace-to-display]\n1 = 2\n", path: "workspace-to-display.1", line: 2, contains: "string")
+        // `01` and `+1` would both be workspace 1, silently overriding each other.
+        assertError("[workspace-to-display]\n01 = 'main'\n", path: "workspace-to-display.01", line: 2, contains: "not a workspace number")
+        assertError("[workspace-to-display]\n'+1' = 'main'\n", path: "workspace-to-display.+1", line: 2, contains: "not a workspace number")
         assertError("[display.main]\nworkspaces = 1\n", path: "display.main.workspaces", line: 2, contains: "[workspace-to-display]")
     }
 

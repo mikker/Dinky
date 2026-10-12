@@ -101,7 +101,8 @@ public struct Config: Equatable {
         guard workspaces >= 1 else { throw ConfigError(path: "workspaces", "must be at least 1") }
         if let assignments = try t.table("workspace-to-display") {
             for key in assignments.keys {
-                guard let n = Int(key), (1...workspaces).contains(n) else {
+                // As for [workspace]: only the plain number, so `01` and `+1` can't both name workspace 1.
+                guard let n = Int(key), String(n) == key, (1...workspaces).contains(n) else {
                     throw ConfigError(path: assignments.path(key), "'\(key)' is not a workspace number from 1 to \(workspaces)")
                 }
                 let patterns = try assignments.stringOrStrings(key)!
@@ -277,6 +278,7 @@ public struct Accordion: Equatable {
 
     init(_ t: Table) throws {
         padding = try t.int("padding") ?? padding
+        guard padding >= 0 else { throw ConfigError(path: t.path("padding"), "must be 0 or more") }
         orientation = try t.choice("orientation") ?? orientation
         try t.done()
     }
@@ -339,6 +341,7 @@ public struct Borders: Equatable {
     init(_ t: Table) throws {
         enabled = try t.bool("enabled") ?? enabled
         width = try t.double("width") ?? width
+        guard width >= 0 else { throw ConfigError(path: t.path("width"), "must be 0 or more") }
         activeColor = try t.color("active-color") ?? activeColor
         inactiveColor = try t.color("inactive-color") ?? inactiveColor
         order = try t.choice("order") ?? order
