@@ -277,6 +277,8 @@ struct ConfigTests {
         assertError("[display.main.gaps]\nouter = -8\n", path: "display.main.gaps.outer", line: 2, contains: "0 or more")
         assertError("[accordion]\npadding = -5\n", path: "accordion.padding", line: 2, contains: "0 or more")
         assertError("[borders]\nwidth = -2\n", path: "borders.width", line: 2, contains: "0 or more")
+        assertError("[borders]\nwidth = inf\n", path: "borders.width", line: 2, contains: "a finite number, 0 or more")
+        assertError("[borders]\nwidth = nan\n", path: "borders.width", line: 2, contains: "a finite number, 0 or more")
     }
 
     @Test func accordion() throws {
