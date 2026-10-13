@@ -3,6 +3,16 @@ import Testing
 @testable import DinkyConfig
 
 struct ConfigTests {
+    @Test func `The configuration page shows the default config as dinky writes it`() throws {
+        let page = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "docs/configuration.md")
+        let text = try String(contentsOf: page, encoding: .utf8)
+        let section = try #require(text.range(of: "## Default config\n"))
+        let open = try #require(text.range(of: "```toml\n", range: section.upperBound..<text.endIndex))
+        let close = try #require(text.range(of: "\n```", range: open.upperBound..<text.endIndex))
+        #expect(String(text[open.upperBound..<close.lowerBound]) == Config.defaultTOML)
+    }
+
     @Test func `Default config loads`() throws {
         let config = try Config.parse(Config.defaultTOML)
         #expect(config == Config.default)
