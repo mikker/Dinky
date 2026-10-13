@@ -10,7 +10,8 @@ public struct ConfigFinding: Equatable, CustomStringConvertible {
 }
 
 /// Checks a parsed config beyond what parsing guarantees: every binding and rule command is in the
-/// vocabulary, every `mode X` names a mode, and there is a main mode. Key names are checked at parse time.
+/// vocabulary, every `mode X` names a mode, there is a main mode, and no
+/// `[workspace.N]` table is past the last workspace. Key names are checked at parse time.
 public func checkConfig(_ config: Config) -> [ConfigFinding] {
     var findings: [ConfigFinding] = []
     func check(_ commands: [String], at place: String) {
@@ -26,6 +27,10 @@ public func checkConfig(_ config: Config) -> [ConfigFinding] {
     }
     if config.modes["main"] == nil {
         findings.append(.init(level: .warning, message: "no [mode.main]: no key bindings are active"))
+    }
+    // Harmless, so parsing accepts it; but a typo or a lowered `workspaces` leaves settings that never apply.
+    for number in config.workspaceLayouts.keys.sorted() where number > config.workspaces {
+        findings.append(.init(level: .warning, message: "workspace.\(number): past the last workspace (\(config.workspaces)), so it does nothing"))
     }
     for (name, mode) in config.modes.sorted(by: { $0.key < $1.key }) {
         for (combo, binding) in mode.bindings.sorted(by: { $0.key.description < $1.key.description }) {
