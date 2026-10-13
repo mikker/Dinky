@@ -18,6 +18,14 @@ struct ConfigCheckTests {
         #expect(findings[0].message.contains("[mode.main]"))
     }
 
+    @Test func `Workspace table past the last workspace is a warning`() throws {
+        let findings = try check("workspaces = 3\n[mode.main]\n[workspace.3]\ntiling = false\n[workspace.7]\ntiling = false\n[workspace.4]\ntiling = false")
+        #expect(findings == [
+            .init(level: .warning, message: "workspace.4: past the last workspace (3), so it does nothing"),
+            .init(level: .warning, message: "workspace.7: past the last workspace (3), so it does nothing"),
+        ])
+    }
+
     @Test func `Unknown command in binding`() throws {
         let findings = try check("[mode.main]\nalt-h = 'fly left'")
         #expect(findings.count == 1)

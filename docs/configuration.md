@@ -64,7 +64,8 @@ not restore macOS's persistent Space-switching preference; see
 ## `[workspace.<number>]`
 
 Override the top-level `default-tiling` and `default-layout` for a globally
-numbered workspace.
+numbered workspace. A table past `workspaces` does nothing; `dinky doctor`
+warns about it.
 
 <div class="wide-table" markdown="1">
 
