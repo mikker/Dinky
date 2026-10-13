@@ -341,7 +341,8 @@ public struct Borders: Equatable {
     init(_ t: Table) throws {
         enabled = try t.bool("enabled") ?? enabled
         width = try t.double("width") ?? width
-        guard width >= 0 else { throw ConfigError(path: t.path("width"), "must be 0 or more") }
+        // TOML has inf and nan; neither is a width.
+        guard width.isFinite, width >= 0 else { throw ConfigError(path: t.path("width"), "must be a finite number, 0 or more") }
         activeColor = try t.color("active-color") ?? activeColor
         inactiveColor = try t.color("inactive-color") ?? inactiveColor
         order = try t.choice("order") ?? order
