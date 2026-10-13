@@ -244,7 +244,7 @@ its own.
 
 | Key | Default | |
 |---|---|---|
-| `padding` | `30` | Maximum points the neighbours peek out by; shrinks to leave window content in narrow containers and respect recorded window minima. |
+| `padding` | `30` | Maximum points the neighbours peek out by, 0 or more; shrinks to leave window content in narrow containers and respect recorded window minima. |
 | `orientation` | `'auto'` | On switching to accordion, `'auto'` runs along the container's longer side; `'keep'` keeps its orientation. An orientation set with `layout` is always kept. |
 
 </div>
@@ -255,17 +255,18 @@ its own.
 
 | Key | Default | |
 |---|---|---|
-| `inner` | `8` | Between windows. Or `{ horizontal = 8, vertical = 6 }`. |
-| `outer` | `8` | To the screen edge. Or `{ top = 44, bottom = 8, left = 8, right = 8 }`, or `outer.top = 44`. |
+| `inner` | `8` | Points between windows, 0 or more. Or `{ horizontal = 8, vertical = 6 }`. |
+| `outer` | `8` | Points to the screen edge, 0 or more. Or `{ top = 44, bottom = 8, left = 8, right = 8 }`, or `outer.top = 44`. |
 
 </div>
 
 ## `[workspace-to-display]`
 
-Which display a workspace lives on, by number. A display pattern is `main`,
-`secondary` (the other one, when there are two), or part of the name from
-`dinky list-displays`. A list tries each in turn. Unlisted workspaces, and
-listed ones whose display isn't connected, live on the main display.
+Which display a workspace lives on, by number from 1 to `workspaces`. A
+display pattern is `main`, `secondary` (the other one, when there are two), or
+part of the name from `dinky list-displays`. A list tries each in turn.
+Unlisted workspaces, and listed ones whose display isn't connected, live on
+the main display.
 
 ```toml
 [workspace-to-display]
@@ -305,7 +306,7 @@ fullscreen-width = 0.55
 | Key | Default | |
 |---|---|---|
 | `enabled` | `true` | |
-| `width` | `4` | Points; may be fractional. |
+| `width` | `4` | Points, 0 or more; may be fractional. |
 | `active-color` | `'#e1e3e4'` | `'#rrggbb'` or `'#rrggbbaa'`. |
 | `inactive-color` | `'#494d64'` | |
 | `order` | `'below'` | `'above'` draws a click-through ring over the window. |
