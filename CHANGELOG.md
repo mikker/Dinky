@@ -24,6 +24,16 @@
 - Layout stacking no longer brings back a window you are minimizing when a slow layout pass finishes during the animation (#69).
 - `debug-state` no longer crashes dinky when a window's frame is briefly unavailable during a close or minimize (#69).
 
+### Fixes
+
+- The config rejects negative gaps and accordion padding, border widths that are negative, `inf` or `nan`, and workspace numbers written as `01` or `+1` in `[workspace-to-display]`. Before, they were accepted, and `01` and `1` silently overrode each other.
+- `dinky doctor` warns about a `[workspace.<number>]` table past the last workspace. Before, nothing said the table did nothing.
+
+### Other
+
+- The configuration reference says which values the config accepts: gaps, accordion padding and border width of 0 or more, and workspace numbers from 1 to `workspaces` in `[workspace-to-display]`.
+- A test checks that the configuration page shows the same default config dinky writes on first run.
+
 ## 0.24
 
 **Upgrading scripts:** Raw socket clients must close their writing half after sending a request; a newline no longer submits it. The normal CLI and macOS `nc` already do this. The CLI now rejects replies over 1 MiB: narrow large list queries with filters or `--format`, or use a raw socket client for larger replies.
