@@ -16,6 +16,15 @@ final class FrameApplier {
 
     private var scheduler: FrameScheduler!
     private let lock = NSLock()
+    private var generation = 0
+    private var nextPass = 0
+    private var passes: [WindowID: Int] = [:]
+
+    private struct Pass {
+        let generation: Int
+        let revision: Int
+        let ids: [WindowID]
+    }
     private var elements: [Key: AXUIElement] = [:]
     /// Windows written but not read back, already logged, so a window that stays unreadable is logged once.
     private var unreadable: Set<WindowID> = []
@@ -39,8 +48,17 @@ final class FrameApplier {
                 AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse)
             },
             read: { [unowned self] job in withElement(pid: job.pid, id: job.id, frame) ?? nil },
-            write: { [unowned self] job in withElement(pid: job.pid, id: job.id) { write(job.frame, to: $0) } },
-            move: { [unowned self] job in withElement(pid: job.pid, id: job.id) { move(job.frame.origin, to: $0) } }
+            write: { [unowned self] job, live in
+                guard live() else { return }
+                withElement(pid: job.pid, id: job.id) { write(job.frame, to: $0, live: live) }
+            },
+            move: { [unowned self] job, live in
+                guard live() else { return }
+                withElement(pid: job.pid, id: job.id) {
+                    guard live() else { return .success }
+                    return move(job.frame.origin, to: $0)
+                }
+            }
         )
     }
 
@@ -56,6 +74,7 @@ final class FrameApplier {
     /// Forgets a window that is gone: its element and what the scheduler learned about it.
     func forget(_ id: WindowID) {
         lock.withLock {
+            passes[id] = nil
             elements = elements.filter { $0.key.id != id }
             unreadable.remove(id)
         }
@@ -70,7 +89,24 @@ final class FrameApplier {
     }
 
     /// Drops every frame not written yet.
-    func cancel() { scheduler.cancel() }
+    func cancel() {
+        lock.withLock { generation += 1; passes.removeAll() }
+        scheduler.cancel()
+    }
+
+    func isCurrent(_ results: [FrameResult]) -> Bool { scheduler.isCurrent(results) }
+
+    private func begin(_ layout: Layout) -> Pass {
+        lock.withLock {
+            nextPass += 1
+            for id in layout.order { passes[id] = nextPass }
+            return Pass(generation: generation, revision: nextPass, ids: layout.order)
+        }
+    }
+
+    private func isCurrent(_ pass: Pass) -> Bool {
+        lock.withLock { generation == pass.generation && pass.ids.allSatisfy { passes[$0] == pass.revision } }
+    }
 
     /// Writes one step of an animation: no readback, no retry, no raising.
     func step(_ jobs: [FrameJob]) { scheduler.step(jobs) }
@@ -80,27 +116,40 @@ final class FrameApplier {
     /// `completion` runs on a background queue with the readback of every app touched.
     func apply(_ layout: Layout, pids: [WindowID: pid_t], front: WindowID? = nil,
                completion: @escaping ([FrameResult]) -> Void = { _ in }) {
+        let pass = begin(layout)
         let jobs = layout.order.compactMap { id in
             pids[id].map { FrameJob(pid: $0, id: id, frame: layout.frames[id]!) }
         }
+        let ids = Set(jobs.map(\.id))
         scheduler.submit(jobs) { [unowned self] results in
+            // One app queue may coalesce writes from independent layouts on different displays.
+            let results = results.filter { ids.contains($0.job.id) }
+            guard isCurrent(pass), results.count == jobs.count, isCurrent(results) else { completion([]); return }
             rememberAppMinimums(results)
             logUnreadable(results)
-            raiseIntoOrder(layout, pids: pids, front: front) { completion(results) }
+            raiseIntoOrder(layout, pids: pids, front: front, pass: pass) {
+                completion(self.isCurrent(pass) && self.isCurrent(results) ? results : [])
+            }
         }
     }
 
     /// Raise overlapping windows into the layout's order if they are not, as `apply` does after writing.
     func raiseIntoOrder(_ layout: Layout, pids: [WindowID: pid_t], front: WindowID?, then done: @escaping () -> Void = {}) {
+        raiseIntoOrder(layout, pids: pids, front: front, pass: begin(layout), then: done)
+    }
+
+    private func raiseIntoOrder(_ layout: Layout, pids: [WindowID: pid_t], front: WindowID?, pass: Pass,
+                                then done: @escaping () -> Void) {
         raiseQueue.async {
+            defer { done() }
+            guard self.isCurrent(pass) else { return }
             var ids = layout.raises(current: onScreenOrder())
             // Raising makes a window its app's key window, so the front window goes last when its app had another
             // raised: it overlaps nothing (a column in view of a scrolling strip) and would lose focus otherwise.
             if let front, ids.last != front, let pid = pids[front], ids.contains(where: { pids[$0] == pid }) {
                 ids = ids.filter { $0 != front } + [front]
             }
-            if Self.raisingKeepsFocus(ids, front: front, pids: pids) { self.raise(ids, pids: pids) }
-            done()
+            if Self.raisingKeepsFocus(ids, front: front, pids: pids) { self.raise(ids, pids: pids, pass: pass) }
         }
     }
 
@@ -157,10 +206,14 @@ final class FrameApplier {
     }
 
     /// Raise back to front, so the last raised ends up frontmost. AXRaise does not activate the app.
-    private func raise(_ ids: [WindowID], pids: [WindowID: pid_t]) {
+    private func raise(_ ids: [WindowID], pids: [WindowID: pid_t], pass: Pass) {
         for id in ids {
+            guard isCurrent(pass) else { return }
             guard let pid = pids[id] else { continue }
-            withElement(pid: pid, id: id) { AXUIElementPerformAction($0, kAXRaiseAction as CFString) }
+            withElement(pid: pid, id: id) {
+                guard self.isCurrent(pass) else { return .success }
+                return AXUIElementPerformAction($0, kAXRaiseAction as CFString)
+            }
         }
     }
 
@@ -196,10 +249,11 @@ final class FrameApplier {
 
     // Size, position, size: the first size lets a window near the screen edge move, the second
     // fixes the size if the move clamped it. Stops at an invalid element, which takes no writes.
-    private func write(_ frame: CGRect, to element: AXUIElement) -> AXError {
+    private func write(_ frame: CGRect, to element: AXUIElement, live: () -> Bool) -> AXError {
         var size = frame.size, origin = frame.origin
         let sizeValue = AXValueCreate(.cgSize, &size)!, originValue = AXValueCreate(.cgPoint, &origin)!
         for (attribute, value) in [(kAXSizeAttribute, sizeValue), (kAXPositionAttribute, originValue), (kAXSizeAttribute, sizeValue)] {
+            guard live() else { return .success }
             let error = AXUIElementSetAttributeValue(element, attribute as CFString, value)
             if error == .invalidUIElement { return error }
         }

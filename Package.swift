@@ -50,6 +50,11 @@ let package = Package(
             dependencies: ["DinkyConfig"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .testTarget(
+            name: "DinkyAppTests",
+            dependencies: ["dinky", "DinkyConfig"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
         // The app and CLI.
         .executableTarget(
             name: "dinky",
