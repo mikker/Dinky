@@ -310,11 +310,18 @@ public struct Animations: Equatable {
 public struct Drag: Equatable {
     /// Outline the tile a dragged window came from and the one it will swap with.
     public var placeholders = true
+    /// Holding a dragged window still over a tile splits the tile on the drop, instead of swapping. Off by default.
+    public var holdToSplit = false
+    /// How long the pointer must rest on the tile first.
+    public var holdMs = 500
 
     public init() {}
 
     init(_ t: Table) throws {
         placeholders = try t.bool("placeholders") ?? placeholders
+        holdToSplit = try t.bool("hold-to-split") ?? holdToSplit
+        holdMs = try t.int("hold-ms") ?? holdMs
+        guard holdMs >= 0 else { throw ConfigError(path: t.path("hold-ms"), "must be 0 or more") }
         try t.done()
     }
 }

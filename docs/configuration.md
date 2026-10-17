@@ -248,6 +248,10 @@ including when you follow a window with `move-window-to-workspace --follow`.
 Drag a tiled window's edge to resize it; the other tiles make room, and in the
 scrolling layout its column takes the new width. Drag the window itself and
 drop it on another tile to swap the two; dropped anywhere else, it goes back.
+With `hold-to-split = true`, hold it still over a tile for `hold-ms` before
+dropping and it splits that tile instead: the outline shrinks to the half the
+pointer is in, left, right, top or bottom, and the window lands there. The
+fixed and scrolling layouts only swap.
 While dinky is off, dragging neither swaps nor resizes tiles and shows no drop
 outlines.
 
@@ -256,6 +260,8 @@ outlines.
 | Key | Default | |
 |---|---|---|
 | `placeholders` | `true` | While you drag a tiled window, outline the tile it came from and the tile it will swap with. |
+| `hold-to-split` | `false` | Set `true` to split a tile by holding a dragged window still over it before the drop. |
+| `hold-ms` | `500` | How long the pointer must rest on the tile before the drop splits it. |
 
 </div>
 
@@ -416,6 +422,8 @@ duration-ms = 150               # roughly how long a window takes to arrive
 
 [drag]
 placeholders = true             # outline where a dragged tile came from and the tile it will swap with
+hold-to-split = false           # true: hold a dragged window still over a tile to split it instead of swapping
+hold-ms = 500                   # how long the pointer rests on the tile before the drop splits it
 
 # Which key of each pair bindings answer to: both | left | right. With alt = 'left',
 # right Option still types special characters.

@@ -179,6 +179,17 @@
           "type": "boolean",
           "default": true,
           "description": "While you drag a tiled window, outline the tile it came from and the tile it will swap with."
+        },
+        "hold-to-split": {
+          "type": "boolean",
+          "default": false,
+          "description": "Set true to split a tile by holding a dragged window still over it before the drop."
+        },
+        "hold-ms": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 500,
+          "description": "How long the pointer must rest on the tile before the drop splits it."
         }
       }
     },

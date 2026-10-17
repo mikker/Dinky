@@ -349,10 +349,15 @@ struct ConfigTests {
         duration-ms = 300
         [drag]
         placeholders = false
+        hold-to-split = true
+        hold-ms = 250
         """)
         #expect(!config.animations.enabled)
         #expect(config.animations.durationMs == 300)
         #expect(!config.drag.placeholders)
+        #expect(config.drag.holdToSplit)
+        #expect(config.drag.holdMs == 250)
+        assertError("[drag]\nhold-ms = -1\n", path: "drag.hold-ms", line: 2, contains: "0 or more")
         assertError("[animations]\nduration-ms = -1\n", path: "animations.duration-ms", line: 2, contains: "0 to 1000")
         assertError("[drag]\nghost = true\n", path: "drag.ghost", line: 2, contains: "unknown key")
     }

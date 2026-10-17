@@ -46,6 +46,8 @@ final class Coordinator {
     var adopting: Set<WindowID> = []
     /// The tiled window being dragged with the mouse, until the button is released. See Drag.swift.
     var dragging: WindowID?
+    /// The tile the pointer rests on during that drag.
+    var dragHold: DragHold?
     lazy var placeholders = DragPlaceholders()
     /// Called when the focused window changes.
     var onFocusChange: (() -> Void)?

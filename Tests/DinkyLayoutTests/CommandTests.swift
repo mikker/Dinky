@@ -181,3 +181,31 @@ struct ResizeTests {
         #expect(ws.resize(by: 50) == false)
     }
 }
+
+struct SplitTests {
+    @Test func `Split gives the dragged window the chosen half of the target's tile`() {
+        var ws = workspace(3)
+        #expect(shape(ws.root) == "h[1 v[2 3]]")
+        #expect(ws.split(1, with: 3, on: .down) == true)
+        #expect(shape(ws.root) == "h[v[1 3] 2]")
+        #expect(ws.layout().frames[1] == rect(0, 0, 500, 300))
+        #expect(ws.layout().frames[3] == rect(0, 300, 500, 300))
+        #expect(ws.split(2, with: 1, on: .left) == true)
+        #expect(shape(ws.root) == "h[3 1 2]")
+        #expect(ws.layout().frames[1] == rect(500, 0, 250, 600))
+        #expect(ws.focused == 3)
+    }
+
+    @Test func `Split between siblings turns the pair`() {
+        var ws = workspace(2)
+        #expect(ws.split(2, with: 1, on: .up) == true)
+        #expect(shape(ws.root) == "v[1 2]")
+        #expect(ws.split(1, with: 1, on: .up) == false)
+        #expect(ws.split(1, with: 99, on: .up) == false)
+    }
+
+    @Test func `Fixed and scrolling layouts do not split`() {
+        #expect(!workspace(2, algorithm: .fixed(rows: 1, columns: 2, expand: .columns)).canSplit(1, with: 2))
+        #expect(!workspace(2, algorithm: .scrolling).canSplit(1, with: 2))
+    }
+}

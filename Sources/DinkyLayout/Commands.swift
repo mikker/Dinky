@@ -37,6 +37,30 @@ extension Workspace {
         return true
     }
 
+    /// Whether dropping `id` on `target` can split the target's tile, see `split`. Not in the fixed and scrolling
+    /// layouts, whose cells and columns are not split.
+    public func canSplit(_ target: WindowID, with id: WindowID) -> Bool {
+        guard id != target, contains(id), contains(target), !isScrolling else { return false }
+        if case .fixed = algorithm, isFixedTree { return false }
+        return true
+    }
+
+    /// Take `id` out of its place and give it the `side` half of `target`'s tile, the target keeping the other
+    /// half. Focus stays where it was.
+    @discardableResult
+    public mutating func split(_ target: WindowID, with id: WindowID, on side: Direction) -> Bool {
+        guard canSplit(target, with: id), let path = root.path(of: id), var destination = root.path(of: target) else { return false }
+        isFullscreen = false
+        detach(path, adjusting: &destination)
+        let pair: [Node] = side.isForward ? [.window(target), .window(id)] : [.window(id), .window(target)]
+        root.modify(at: Array(destination.dropLast())) {
+            $0.replace(at: destination.last!, with: .container(Container(ContainerOrientation(side.orientation), .tiles, pair)))
+        }
+        normalize()
+        if let focused { focus(focused) }
+        return true
+    }
+
     /// Move the focused window one step in `direction`, AeroSpace style: swap with a sibling window, enter a
     /// sibling container, or leave the container at its edge. At the workspace edge, wraps the root in a new
     /// container along that axis, so a window leaves a root accordion for a tile beside it; if the root already

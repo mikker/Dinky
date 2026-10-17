@@ -66,6 +66,8 @@ extension Config {
 
     [drag]
     placeholders = true             # outline where a dragged tile came from and the tile it will swap with
+    hold-to-split = false           # true: hold a dragged window still over a tile to split it instead of swapping
+    hold-ms = 500                   # how long the pointer rests on the tile before the drop splits it
 
     # Which key of each pair bindings answer to: both | left | right. With alt = 'left',
     # right Option still types special characters.
