@@ -18,7 +18,7 @@ final class Coordinator {
     let model = WindowModel()
     var enabled = true {
         didSet {
-            if !enabled { applier.cancel(); animator.cancel(); cancelDrag() }
+            if !enabled { applier.cancel(); animator.cancel(); classifier.cancel(); cancelDrag() }
             if enabled != oldValue { updateBorders() }
             if enabled, !oldValue { reconcile() }
         }
@@ -33,8 +33,7 @@ final class Coordinator {
     private(set) var workspaces: [UInt64: Workspace] = [:]
     var placements: [WindowID: Placement] = [:]
     var dirty: Set<UInt64> = []
-    /// Classification attempts for windows whose AX element has not appeared yet.
-    var attempts: [WindowID: Int] = [:]
+    let classifier = WindowClassifier()
     /// Newly shown windows at the exact frame of a tile of their app, held out of the trees for a moment in case
     /// they are a tab switch: by newcomer, the tile's window. See Tabs.swift.
     var heldTabs: [WindowID: WindowID] = [:]
@@ -72,6 +71,7 @@ final class Coordinator {
         var known = displays.displays
         displays.observe { [weak self] displays in
             guard let self else { return }
+            borders?.spacesChanged(displays.displays)
             let before = known
             known = displays.displays
             if Set(known.map(\.uuid)) != Set(before.map(\.uuid)) { snap.formUnion(workspaces.keys) }
@@ -107,7 +107,7 @@ final class Coordinator {
     /// and nothing follows windows as they move.
     private func updateBorders() {
         if enabled, config.borders.enabled {
-            borders = borders ?? BorderManager(config: config.borders, model: model,
+            borders = borders ?? BorderManager(config: config.borders, model: model, displays: displays.displays,
                                                isAnimating: { [unowned self] id in animator.isAnimating(id) })
             borders?.update(config: config.borders)
         } else {
@@ -284,11 +284,8 @@ final class Coordinator {
         if placements[window.id] == nil {
             // AX only lists windows on a Space that is on screen; the rest are classified when theirs is.
             guard window.isNormal, isVisible(window.spaceID) else { return }
-            // Once, on the first classification attempt, not again on its retries.
-            if attempts[window.id] == nil { noteFirstShowing(window) }
-            guard let classification = classify(window) else { return }
-            placements[window.id] = Placement(floating: classification.floating, space: nil)
-            if !classification.runsRules, adopt(window) { return }
+            classify(window)
+            return
         }
         guard !adopting.contains(window.id), !placements[window.id]!.floating else { return }
         let old = placements[window.id]!.space
@@ -306,7 +303,7 @@ final class Coordinator {
     }
 
     private func forget(_ id: WindowID) {
-        attempts[id] = nil
+        classifier.forget(id)
         adoptTargets[id] = nil
         adopting.remove(id)
         applier.forget(id)
@@ -406,7 +403,7 @@ final class Coordinator {
             guard let self else { return }
             applier.apply(layout, pids: pids, front: workspace.focused) { [weak self] results in
                 DispatchQueue.main.async {
-                    guard let self, self.enabled else { return }
+                    guard let self, self.enabled, self.applier.isCurrent(results) else { return }
                     self.animator.noteLanded(results)
                     self.edit(key) { $0.minimumSizes = self.minimumSizes(in: $0) }
                     self.flush()
