@@ -3,24 +3,28 @@ import DinkyConfig
 import DinkyLayout
 import DinkyPrivate
 
-// Trackpad swipes along a scrolling workspace, as in niri. macOS hands the horizontal swipe that switches Spaces
-// to the Dock as private Dock control events; a tap ahead of the Dock reads which way each swipe heads and
-// decides once who has it. While the scrolling workspace on the display under the pointer has a column that way,
-// dinky focuses it and keeps the swipe from the Dock; past the last column the swipe switches Space, the way
-// `[swipe] space-switch` says. Anywhere else, a single column or dinky disabled included, the swipe is left
-// to macOS whole. The interception follows iss (github.com/joshuarli/iss). Main thread only.
+// Trackpad swipes between a workspace's windows, as in niri. macOS hands the swipe that switches Spaces, and the
+// one up and down into Mission Control and App Exposé, to the Dock as private Dock control events; a tap ahead of
+// the Dock reads which way each swipe heads and decides once who has it. While the tiled workspace on the display
+// under the pointer has a window that way (a column, an accordion child, a tile), dinky focuses it and keeps the
+// swipe from the Dock; past the last window the swipe is macOS's, the way `[swipe] space-switch` says. Anywhere
+// else, a lone window or dinky disabled included, the swipe is left to macOS whole. The interception follows iss
+// (github.com/joshuarli/iss). Main thread only.
 final class SwipeFocus {
     private var config = Swipe()
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
-    private var tracker = SwipeTracker(mode: .instant)
-    /// The display under the pointer when the swipe began. The Dock swipes that display too.
+    private var tracker = SwipeTracker()
+    /// The swipe under way: the display under the pointer when it began, which the Dock acts on too, whether it
+    /// runs up and down, and how dinky takes it.
     private var display: Display?
+    private var vertical = false
+    private var mode = SpaceSwitch.instant
 
     /// Starts or stops the tap for this config. Called once tiling has started and on every config load.
     func update(config: Swipe) {
         self.config = config
-        tracker = SwipeTracker(mode: config.spaceSwitch)
+        tracker = SwipeTracker()
         if config.enabled { start() } else { stop() }
     }
 
@@ -50,18 +54,18 @@ final class SwipeFocus {
     fileprivate func handle(_ type: CGEventType, _ event: CGEvent) -> Unmanaged<CGEvent>? {
         let pass = Unmanaged.passUnretained(event)
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            tracker = SwipeTracker(mode: config.spaceSwitch)
+            tracker = SwipeTracker()
             dinky_forget_own_dock_swipes()
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return pass
         }
-        var phase = DinkySwipePhase.began, direction: Int32 = 0
-        guard dinky_read_dock_swipe(event, &phase, &direction) else {
+        var phase = DinkySwipePhase.began, vertical = false, direction: Int32 = 0
+        guard dinky_read_dock_swipe(event, &phase, &vertical, &direction) else {
             return dinky_is_gesture_event(event) && !tracker.passesGestureEvents ? nil : pass
         }
         if dinky_take_own_dock_swipe() { return pass }
         let step = tracker.handle(phase, Int(direction), needsPayload: dinky_dock_swipe_needs_payload(),
-                                  start: { begin(at: event.location) },
+                                  start: { begin(at: event.location, vertical: vertical) },
                                   claim: { claim($0) })
         if let way = step.switchSpace, let display {
             // After the callback returns, so the switch's own swipe comes after this one's end.
@@ -76,21 +80,30 @@ final class SwipeFocus {
         }
     }
 
-    /// Whether dinky may take the swipe beginning at `point`: a scrolling workspace with a column to go to.
-    private func begin(at point: CGPoint) -> Bool {
+    /// How dinky takes the swipe beginning at `point`, or nil to leave it to macOS: only on a tiled workspace with a
+    /// window to go to along the swipe. Up and down always go the native way; dinky has no fast Mission Control.
+    private func begin(at point: CGPoint, vertical: Bool) -> SpaceSwitch? {
+        self.vertical = vertical
+        mode = vertical ? .native : config.spaceSwitch
         display = AppState.shared.displays.displays.first { $0.frame.contains(point) }
-        guard AppState.shared.enabled, !MissionControl.shared.active, let display,
-              let workspace = AppState.shared.coordinator?.workspace(on: display) else { return false }
-        return workspace.swipeTarget(.left) != nil || workspace.swipeTarget(.right) != nil
+        guard !vertical || config.vertical, AppState.shared.enabled, !MissionControl.shared.active, let display,
+              let workspace = AppState.shared.coordinator?.workspace(on: display),
+              [direction(-1), direction(1)].contains(where: { workspace.swipeTarget($0) != nil }) else { return nil }
+        return mode
     }
 
-    /// Focuses the column the swipe heads for, if there is one; +1 is right, toward the next Space.
+    /// Where a swipe heading `way` (+1 right or down, -1 left or up) moves focus.
+    private func direction(_ way: Int) -> Direction {
+        vertical ? (way > 0 ? .down : .up) : (way > 0 ? .right : .left)
+    }
+
+    /// Focuses the window the swipe heads for, if there is one.
     private func claim(_ way: Int) -> Bool {
-        let direction: Direction = way > 0 ? .right : .left
+        let direction = direction(way)
         guard let display, let coordinator = AppState.shared.coordinator,
               let workspace = coordinator.workspace(on: display), let from = workspace.focused,
               workspace.swipeTarget(direction) != nil else {
-            log("swipe: no column \(direction), \(config.spaceSwitch == .native ? "macOS switches Space" : "switching Space")")
+            log("swipe: no window \(direction), \(mode == .native ? "macOS has it" : "switching Space")")
             return false
         }
         log("swipe: focus \(direction)")
@@ -126,10 +139,10 @@ private func swipeCallback(proxy: CGEventTapProxy, type: CGEventType, event: CGE
 }
 
 /// One swipe from began to ended, as the tap sees it, apart from the tap so the order of events can be followed.
-/// `start` is asked at began whether dinky may take the swipe at all; if not, it is the Dock's whole. Otherwise
-/// `claim` is asked once, as soon as the way is known (+1 right, -1 left), and takes the swipe by focusing that way.
-/// A swipe dinky does not claim goes past the last column: in `native` mode the Dock has it, which has seen it
-/// all along; in `instant` mode dinky has kept it from the Dock and switches Space itself once it ends.
+/// `start` is asked at began how dinky takes the swipe; nil leaves it to the Dock whole. Otherwise `claim` is asked
+/// once, as soon as the way is known (+1 right or down, -1 left or up), and takes the swipe by focusing that way.
+/// A swipe dinky does not claim goes past the last window: `native`, the Dock has it, which has seen it all along;
+/// `instant`, dinky has kept it from the Dock and switches Space itself once it ends.
 struct SwipeTracker {
     enum Verdict: Equatable { case pass, swallow, neutralize }
 
@@ -140,18 +153,15 @@ struct SwipeTracker {
         case dock
         /// Dinky may take it, once it is known which way it heads.
         case undecided
-        /// Dinky focused a column.
+        /// Dinky focused a window.
         case claimed
-        /// Heading past the last column, in `instant` mode.
+        /// Heading past the last window, in `instant` mode.
         case pastEdge(Int)
     }
 
-    let mode: SpaceSwitch
     private var state = State.idle
-
-    init(mode: SpaceSwitch) {
-        self.mode = mode
-    }
+    /// Whether the Dock saw the swipe under way begin: any but an `instant` one.
+    private var native = true
 
     /// Whether the gesture events that come with a swipe go on: only once dinky has taken the swipe are they
     /// kept back, or all along while dinky keeps it from the Dock.
@@ -159,18 +169,19 @@ struct SwipeTracker {
         switch state {
         case .idle, .dock: true
         case .claimed: false
-        case .undecided, .pastEdge: mode == .native
+        case .undecided, .pastEdge: native
         }
     }
 
     /// The verdict on one Dock swipe event, and the way to switch Space once it has gone, if any. `needsPayload`:
     /// on macOS 27 the end goes on to the Dock with its movement cleared, as iss lets it, rather than kept back.
     mutating func handle(_ phase: DinkySwipePhase, _ way: Int, needsPayload: Bool,
-                         start: () -> Bool, claim: (Int) -> Bool) -> (verdict: Verdict, switchSpace: Int?) {
-        let native = mode == .native
+                         start: () -> SpaceSwitch?, claim: (Int) -> Bool) -> (verdict: Verdict, switchSpace: Int?) {
         if phase == .began {
-            state = start() ? .undecided : .dock
-            return (state == .dock || native ? .pass : .swallow, nil)
+            let mode = start()
+            native = mode != .instant
+            state = mode == nil ? .dock : .undecided
+            return (native ? .pass : .swallow, nil)
         }
         if state == .undecided, way != 0 {
             state = claim(way) ? .claimed : native ? .dock : .pastEdge(way)

@@ -403,23 +403,26 @@ public struct FocusFollowsMouse: Equatable {
 }
 
 /// `[swipe]`: the trackpad swipe that switches Spaces (three fingers, or four if macOS is set so) moves focus
-/// along a scrolling workspace's columns first, and switches Space only past the last column.
+/// between a tiled workspace's windows first, and switches Space only past the last one.
 public struct Swipe: Equatable {
     public var enabled = false
-    /// How a swipe past the last column switches Space.
+    /// How a swipe past the last window switches Space.
     public var spaceSwitch = SpaceSwitch.instant
+    /// Whether the swipe up and down, Mission Control's and App Exposé's, focuses the windows below and above first.
+    public var vertical = false
 
     public init() {}
 
     init(_ t: Table) throws {
         enabled = try t.bool("enabled") ?? enabled
         spaceSwitch = try t.choice("space-switch") ?? spaceSwitch
+        vertical = try t.bool("vertical") ?? vertical
         try t.done()
     }
 }
 
 /// `instant`: dinky keeps the swipe from macOS and switches with its own fast swipe once the fingers lift.
-/// `native`: macOS has the swipe, and the Spaces slide with the fingers.
+/// `native`: macOS sees the swipe begin and end, so a short swipe moves focus and a full one switches Space.
 public enum SpaceSwitch: String, CaseIterable {
     case instant, native
 }

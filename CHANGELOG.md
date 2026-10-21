@@ -27,7 +27,7 @@
 
 ### Trackpad
 
-- New `[swipe]`: with `enabled = true`, the trackpad swipe that switches Spaces moves along a scrolling workspace's columns first, as in niri, and switches Space only past the last column. `space-switch = 'instant'` (the default) switches with dinky's fast switch once your fingers lift; `'native'` leaves that swipe to macOS, whose Spaces slide with your fingers. Workspaces that aren't scrolling keep macOS's swipe.
+- New `[swipe]`: with `enabled = true`, the trackpad swipe that switches Spaces moves between a tiled workspace's windows first (scrolling columns, accordion children, tiles), as niri's does along its columns, and switches Space only past the last window. `space-switch = 'instant'` (the default) switches with dinky's fast switch once your fingers lift; with `'native'` macOS sees the swipe too, so a short swipe moves focus and a full, quick one switches Space. `vertical = true` does the same up and down, before Mission Control and App Exposé.
 
 ## 0.23
 

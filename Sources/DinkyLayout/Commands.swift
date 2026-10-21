@@ -27,6 +27,12 @@ extension Workspace {
         return candidates.min { $0.distance < $1.distance }?.id
     }
 
+    /// The window a trackpad swipe toward `direction` focuses: the focused window's neighbour that way, a column of
+    /// the scrolling strip, an accordion child or a tile. Nil at the edge, where the swipe is macOS's again.
+    public func swipeTarget(_ direction: Direction) -> WindowID? {
+        focused.flatMap { neighbor(of: $0, direction) }
+    }
+
     /// Swap two windows' places in the tree, keeping both tiles' sizes. Focus stays where it was.
     @discardableResult
     public mutating func swap(_ first: WindowID, _ second: WindowID) -> Bool {

@@ -19,9 +19,10 @@ typedef NS_ENUM(int, DinkySwipePhase) {
 
 /// The events a tap needs to see the Dock swipe: Dock control events and the gesture events that come with them.
 CGEventMask dinky_dock_swipe_event_mask(void);
-/// Reads a horizontal Dock swipe, the one that switches Spaces: its phase and the way it heads, +1 toward higher
-/// Space indices, -1 toward lower, 0 while it has not moved. False for any other event, vertical swipes included.
-bool dinky_read_dock_swipe(CGEventRef event, DinkySwipePhase *phase, int *direction);
+/// Reads a Dock swipe: its phase, whether it runs up and down (Mission Control and App Exposé) rather than sideways
+/// (Spaces), and the way it heads: +1 toward what is right (a higher Space index) or below, -1 toward what is left
+/// or above, 0 while it has not moved. False for any other event.
+bool dinky_read_dock_swipe(CGEventRef event, DinkySwipePhase *phase, bool *vertical, int *direction);
 /// Whether the event is one of the gesture events that come with a Dock swipe.
 bool dinky_is_gesture_event(CGEventRef event);
 /// Clears a Dock swipe event's progress and velocity, so passing it on goes nowhere.

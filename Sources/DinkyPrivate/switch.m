@@ -16,6 +16,7 @@ static const int kHIDEventTypeDockSwipe = 23;      // kIOHIDEventTypeDockSwipe
 static const int kGestureSwipeMask = 115;          // kCGEventGestureSwipeMask
 static const int kGestureSwipeMotion = 123;        // kCGEventGestureSwipeMotion
 static const int kGestureMotionHorizontal = 1;     // kCGGestureMotionHorizontal
+static const int kGestureMotionVertical = 2;       // kCGGestureMotionVertical
 static const int kGestureSwipeProgress = 124;      // kCGEventGestureSwipeProgress
 static const int kGestureSwipePositionX = 125;     // kCGEventGestureSwipePositionX
 static const int kGestureSwipePositionY = 126;     // kCGEventGestureSwipePositionY
@@ -376,15 +377,17 @@ CGEventMask dinky_dock_swipe_event_mask(void)
     return (1ULL << kEventGesture) | (1ULL << kEventDockControl);
 }
 
-bool dinky_read_dock_swipe(CGEventRef event, DinkySwipePhase *phase, int *direction)
+bool dinky_read_dock_swipe(CGEventRef event, DinkySwipePhase *phase, bool *vertical, int *direction)
 {
     if (CGEventGetIntegerValueField(event, kEventTypeField) != kEventDockControl
-        || CGEventGetIntegerValueField(event, kGestureHIDType) != kHIDEventTypeDockSwipe
-        || CGEventGetIntegerValueField(event, kGestureSwipeMotion) != kGestureMotionHorizontal) return false;
+        || CGEventGetIntegerValueField(event, kGestureHIDType) != kHIDEventTypeDockSwipe) return false;
+    int64_t motion = CGEventGetIntegerValueField(event, kGestureSwipeMotion);
+    if (motion != kGestureMotionHorizontal && motion != kGestureMotionVertical) return false;
+    *vertical = motion == kGestureMotionVertical;
     *phase = (DinkySwipePhase)CGEventGetIntegerValueField(event, kGesturePhase);
     // The progress while the fingers move; a quick flick may only report a velocity as it ends.
     double value = CGEventGetDoubleValueField(event, kGestureSwipeProgress);
-    if (value == 0.0) value = CGEventGetDoubleValueField(event, kGestureSwipeVelocityX);
+    if (value == 0.0) value = CGEventGetDoubleValueField(event, *vertical ? kGestureSwipeVelocityY : kGestureSwipeVelocityX);
     if (value == 0.0) {
         *direction = 0;
     } else if (requires_augmentation()) {
@@ -396,6 +399,8 @@ bool dinky_read_dock_swipe(CGEventRef event, DinkySwipePhase *phase, int *direct
         bool reversed = NSProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26;
         *direction = (value > 0.0) == reversed ? 1 : -1;
     }
+    // Up and down run the other way round from sideways for the same sign. Seen on 27.0.1.
+    if (*vertical) *direction = -*direction;
     return true;
 }
 

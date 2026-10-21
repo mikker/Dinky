@@ -76,8 +76,9 @@ extension Config {
     accordion-edges = true          # resting on a peeking accordion edge focuses that window
 
     [swipe]
-    enabled = false                 # the Spaces swipe focuses the next column of a scrolling workspace first
-    space-switch = 'instant'        # past the last column: instant (dinky's fast switch) | native (macOS's slide)
+    enabled = false                 # the Spaces swipe focuses the next window of a tiled workspace first
+    space-switch = 'instant'        # past the last window: instant (dinky's fast switch) | native (macOS's own)
+    vertical = false                # up and down too: windows above and below, then Mission Control or App Exposé
 
     [animations]
     enabled = true                  # windows glide to their tiles; off while Reduce Motion is on
