@@ -324,6 +324,29 @@ fullscreen-width = 0.55
 
 </div>
 
+## `[swipe]`
+
+The trackpad swipe that switches Spaces moves along a scrolling workspace's
+columns first, as niri's does. Swipe toward the next column and dinky focuses
+it; swipe past the last column and the Space switches, as it always has. The
+swipe is whichever macOS uses to switch Spaces: three fingers, or four if
+**System Settings › Trackpad › More Gestures › Swipe between full-screen
+applications** says so. Vertical swipes, Mission Control's, are left alone.
+
+dinky reads the swipe from the Dock's private events, as it already switches
+Spaces with them, so a macOS update can break it. Each swipe moves one column.
+On a workspace that isn't scrolling, or holds one column, or while dinky is
+disabled, the swipe is macOS's own.
+
+<div class="wide-table" markdown="1">
+
+| Key | Default | |
+|---|---|---|
+| `enabled` | `false` | Swipes focus columns of scrolling workspaces. |
+| `space-switch` | `'instant'` | How a swipe past the last column switches Space. `'instant'`: dinky keeps the swipe from macOS and switches with its own fast switch once your fingers lift. `'native'`: macOS has the swipe, and the Spaces slide with your fingers. |
+
+</div>
+
 ## `[animations]`
 
 <div class="wide-table" markdown="1">
@@ -572,6 +595,10 @@ exclude-apps = []               # bundle IDs whose windows get no border
 enabled = false
 delay-ms = 100                  # how long the pointer rests on a window before it takes focus
 accordion-edges = true          # resting on a peeking accordion edge focuses that window
+
+[swipe]
+enabled = false                 # the Spaces swipe focuses the next column of a scrolling workspace first
+space-switch = 'instant'        # past the last column: instant (dinky's fast switch) | native (macOS's slide)
 
 [animations]
 enabled = true                  # windows glide to their tiles; off while Reduce Motion is on

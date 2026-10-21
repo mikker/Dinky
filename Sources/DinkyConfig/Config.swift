@@ -37,6 +37,7 @@ public struct Config: Equatable {
     public var displays: [DisplayOverride] = []
     public var borders = Borders()
     public var focusFollowsMouse = FocusFollowsMouse()
+    public var swipe = Swipe()
     public var animations = Animations()
     public var drag = Drag()
     public var modifiers = ModifierSides()
@@ -138,6 +139,7 @@ public struct Config: Equatable {
         }
         borders = try t.table("borders").map(Borders.init) ?? borders
         focusFollowsMouse = try t.table("focus-follows-mouse").map(FocusFollowsMouse.init) ?? focusFollowsMouse
+        swipe = try t.table("swipe").map(Swipe.init) ?? swipe
         animations = try t.table("animations").map(Animations.init) ?? animations
         drag = try t.table("drag").map(Drag.init) ?? drag
         modifiers = try t.table("modifiers").map(ModifierSides.init) ?? modifiers
@@ -398,6 +400,28 @@ public struct FocusFollowsMouse: Equatable {
         accordionEdges = try t.bool("accordion-edges") ?? accordionEdges
         try t.done()
     }
+}
+
+/// `[swipe]`: the trackpad swipe that switches Spaces (three fingers, or four if macOS is set so) moves focus
+/// along a scrolling workspace's columns first, and switches Space only past the last column.
+public struct Swipe: Equatable {
+    public var enabled = false
+    /// How a swipe past the last column switches Space.
+    public var spaceSwitch = SpaceSwitch.instant
+
+    public init() {}
+
+    init(_ t: Table) throws {
+        enabled = try t.bool("enabled") ?? enabled
+        spaceSwitch = try t.choice("space-switch") ?? spaceSwitch
+        try t.done()
+    }
+}
+
+/// `instant`: dinky keeps the swipe from macOS and switches with its own fast swipe once the fingers lift.
+/// `native`: macOS has the swipe, and the Spaces slide with the fingers.
+public enum SpaceSwitch: String, CaseIterable {
+    case instant, native
 }
 
 /// `[animations]`: windows glide to their tiles instead of jumping. Off while macOS's Reduce Motion is on.

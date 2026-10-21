@@ -87,6 +87,13 @@ extension Workspace {
             : min(max(current, column.start + column.width - area.width), column.start)
     }
 
+    /// The window a trackpad swipe toward `direction` focuses: the focused window's neighbour that way along a
+    /// scrolling strip. Nil past the last column, where the swipe switches Space instead, and off the strip.
+    public func swipeTarget(_ direction: Direction) -> WindowID? {
+        guard isScrolling, direction.orientation == .horizontal, let focused else { return nil }
+        return neighbor(of: focused, direction)
+    }
+
     /// The strip laid out at the current scroll offset, windows anywhere along it, on screen or not. The focused
     /// column comes first in the stacking, then the others by distance from it.
     func stripLayout() -> Layout {

@@ -34,6 +34,7 @@ final class AppState {
     let recovery = Recovery()
     private let hooks = Hooks()
     private let hoverFocus = HoverFocus()
+    private let swipeFocus = SwipeFocus()
     private var watcher: ConfigWatcher?
 
     private init() {
@@ -69,6 +70,7 @@ final class AppState {
         numbers.arrange()
         hooks.start()
         hoverFocus.update(config: config.focusFollowsMouse)
+        swipeFocus.update(config: config.swipe)
     }
 
     /// The one enable transition. Off stops tiling and puts every window back where it was before dinky
@@ -109,6 +111,7 @@ final class AppState {
                 coordinator.update(config: config)
                 numbers.arrange()
                 hoverFocus.update(config: config.focusFollowsMouse)
+                swipeFocus.update(config: config.swipe)
             }
             applyStartAtLogin(config.startAtLogin)
         case .failure(let error):

@@ -201,6 +201,19 @@
         }
       }
     },
+    "swipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The trackpad swipe that switches Spaces focuses the next column of a scrolling workspace first, and switches Space past the last column.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "space-switch": {
+          "enum": ["instant", "native"],
+          "default": "instant",
+          "description": "How a swipe past the last column switches Space: instant, dinky's fast switch once the fingers lift, or native, macOS's slide that follows the fingers."
+        }
+      }
+    },
     "animations": {
       "type": "object",
       "additionalProperties": false,
