@@ -109,4 +109,19 @@ public struct WorkspacePlan {
         }
         return PlanStep(binding: binding, action: nil)
     }
+
+    /// The binding renumbered to follow the order the Spaces now have, as a drag in Mission Control leaves them:
+    /// on each display, the numbers of the workspaces that live there go, smallest first, to their Spaces from
+    /// left to right. Spaces and windows stay where they are, and the numbers are back in the order `step`
+    /// keeps, so it has nothing to move. A workspace off its display, or whose Space is gone, keeps its number.
+    public func renumbered(_ displays: [PlanDisplay], binding: [Int: UInt64]) -> [Int: UInt64] {
+        let homes = homes(displays)
+        var result = binding
+        for display in displays {
+            let here = binding.filter { homes[$0.key] == display.uuid && display.spaces.contains($0.value) }
+            let spaces = display.spaces.filter { here.values.contains($0) }
+            for (n, space) in zip(here.keys.sorted(), spaces) { result[n] = space }
+        }
+        return result
+    }
 }

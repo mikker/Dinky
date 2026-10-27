@@ -8,6 +8,7 @@ struct ConfigTests {
         #expect(config == Config.default)
         #expect(config.startAtLogin)
         #expect(config.workspaces == 5)
+        #expect(!config.followSpaceOrder)
         #expect(config.defaultLayout == .tiles)
         #expect(config.defaultTiling)
         #expect(config.followAppActivation == FollowAppActivation())
@@ -51,12 +52,14 @@ struct ConfigTests {
         let config = try Config.parse("""
         start-at-login = false
         workspaces = 3
+        follow-space-order = true
         default-layout = 'accordion'
         follow-app-activation = false
         float-windows-without-fullscreen = false
         """)
         #expect(!config.startAtLogin)
         #expect(config.workspaces == 3)
+        #expect(config.followSpaceOrder)
         #expect(config.defaultLayout == .accordion)
         #expect(!config.followAppActivation.enabled)
         #expect(!config.floatWindowsWithoutFullscreen)

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Configuration
+
+- New `follow-space-order` renumbers workspaces when you reorder Spaces in Mission Control, so on each display the leftmost Space is its lowest-numbered workspace. Windows stay where they are, and the menu bar and `workspace-changed` hooks update at once. Off by default: a workspace keeps its number, and the next arrangement moves its windows back to that number's place.
+
 ## 0.23
 
 ### Configuration
