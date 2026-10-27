@@ -49,6 +49,7 @@ struct SchemaTests {
     private static let everyKey = """
         start-at-login = false
         workspaces = 4
+        follow-space-order = true
         default-layout = 'accordion'
         default-tiling = true
         float-windows-without-fullscreen = false

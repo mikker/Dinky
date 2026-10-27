@@ -27,6 +27,7 @@ file is left alone, with the read error shown in the menu.
 |---|---|---|
 | `start-at-login` | `true` | Register as a login item. |
 | `workspaces` | `5` | Workspaces across all displays, one native Space each. dinky creates and removes Spaces to match. |
+| `follow-space-order` | `false` | Set `true` to renumber workspaces when you reorder Spaces in Mission Control: on each display the leftmost Space becomes its lowest-numbered workspace, and windows stay where they are. Left `false`, a workspace keeps its number, and the next arrangement (a config reload, a display change, a Space removed) moves its windows back to that number's place. |
 | `default-layout` | `'tiles'` | `'tiles'` (the existing dwindle layout), `'dwindle'`, `'accordion'`, `'fixed'`, `'scrolling'`, or `'master'`. |
 | `default-tiling` | `true` | Set `false` to leave workspaces untiled unless overridden. |
 | `follow-app-activation` | `true` | Cmd-Tab and Dock clicks switch Spaces the fast way. Needs the macOS "switch to a Space with open windows" setting off. Write it as a [`[follow-app-activation]`](#follow-app-activation) table to leave some apps unfollowed. |
@@ -368,7 +369,7 @@ environment `exec-and-forget` gets.
 |---|---|
 | `startup` | Once, after dinky has read the windows and displays. |
 | `workspace-changing` | When a dinky switch starts, before it lands, and again when a burst of switches changes the target. |
-| `workspace-changed` | When a display's workspace changes, or a switch gives up. |
+| `workspace-changed` | When a display's workspace changes, or a switch gives up. With `follow-space-order`, also when a reorder renumbers a display's workspaces, even if the number it shows stays the same, so a bar listing workspaces redraws. |
 | `focus-changed` | When focus changes, debounced 50 ms. |
 | `mode-changed` | When the binding mode changes, including back to `main` when the config reloads. Sets `DINKY_MODE` and `DINKY_PREV_MODE`. |
 | `display-changed` | When a display connects or disconnects, once the displays have settled and dinky has moved the workspaces to them, about a second later. Sets `DINKY_DISPLAYS` and `DINKY_PREV_DISPLAYS`, how many displays there are now and were before. |
@@ -442,6 +443,7 @@ The default `alt-` bindings take over Option-letter characters; set
 
 start-at-login = true
 workspaces = 5                  # across all displays, one native Space each
+follow-space-order = false      # true renumbers workspaces when you reorder Spaces in Mission Control
 default-layout = 'tiles'        # tiles (dwindle) | dwindle | accordion | fixed | scrolling | master
 default-tiling = true           # false leaves workspaces untiled unless overridden
 follow-app-activation = true    # Cmd-Tab and Dock clicks switch Spaces the fast way

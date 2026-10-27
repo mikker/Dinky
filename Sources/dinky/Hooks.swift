@@ -1,9 +1,10 @@
 import Foundation
 
 // The config's `[hooks]`: `workspace-changing` when dinky starts or retargets a switch, `workspace-changed`
-// when any display's current workspace changes (dinky's switches and native ones alike) or a dinky switch
-// gives up, `focus-changed` when the focused window changes, debounced, `mode-changed` when the binding mode
-// changes, with the new mode and the previous one, `display-changed` once the workspaces have moved after a
+// when any display's current workspace changes (dinky's switches and native ones alike), a dinky switch
+// gives up, or `follow-space-order` renumbers a display's workspaces, `focus-changed` when the focused
+// window changes, debounced, `mode-changed` when the binding mode changes, with the new mode and the
+// previous one, `display-changed` once the workspaces have moved after a
 // display connects or disconnects, and `startup` once. Started once the coordinator has read the windows and displays, so startup fires nothing
 // but `startup`. Main thread only.
 final class Hooks {
@@ -21,6 +22,7 @@ final class Hooks {
         // Arranging can renumber what a display shows without a Space change.
         state.numbers.observe { [weak self] in self?.displaysChanged(AppState.shared.displays) }
         state.numbers.onArranged = { [weak self] in self?.arranged() }
+        state.numbers.onRenumbered = { [weak self] in self?.renumbered($0) }
         SpaceSwitcher.shared.onTarget = { [weak self] uuid, target in self?.switchTargeted(uuid, target) }
         SpaceSwitcher.shared.onGiveUp = { [weak self] uuid in self?.switchGaveUp(uuid) }
         state.coordinator?.onFocusChange = { [weak self] in self?.focusChanged() }
@@ -44,6 +46,17 @@ final class Hooks {
             if let target = SpaceSwitcher.shared.target(on: display.uuid), target != display.currentSpaceID { continue }
             workspaces[display.uuid] = new
             runWorkspaceHooks(commands, workspace: new, previous: old, display: i)
+        }
+    }
+
+    /// Following the Space order renumbers workspaces, so what each number holds changes even on a display that
+    /// still shows the same number. `workspace-changed` runs for those too, so a bar listing workspaces redraws;
+    /// a display now showing another number is reported by `displaysChanged` once the numbering is announced.
+    private func renumbered(_ uuids: Set<String>) {
+        for (i, display) in AppState.shared.displays.displays.enumerated() where uuids.contains(display.uuid) {
+            let new = number(display)
+            guard workspaces[display.uuid] == new else { continue }
+            runWorkspaceHooks(AppState.shared.config.hooks.workspaceChanged, workspace: new, previous: new, display: i)
         }
     }
 
