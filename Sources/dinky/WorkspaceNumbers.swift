@@ -6,7 +6,8 @@ import DinkyPrivate
 // where `[workspace-to-display]` puts them, else on the main display. `arrange()` makes the Spaces match: it
 // runs `WorkspacePlan`'s steps (create a Space, move a Space's windows, remove an empty Space) until there are
 // none left. It runs at launch, on config reload, and a moment after displays or Spaces come and go. Between
-// runs a workspace stays on its Space by ID, wherever macOS moves that Space.
+// runs a workspace stays on its Space by ID, wherever macOS moves that Space, unless `follow-space-order` is on:
+// then reordering a display's Spaces renumbers its workspaces to match, and windows stay put.
 // A display that goes away has macOS pour the windows of its Spaces onto another display's first Space, which
 // is workspace 1's. So the workspace of every window is noted while the displays are settled, and once the
 // Spaces are arranged after a display change, windows found off their workspace go back to it, unless dinky
@@ -17,6 +18,9 @@ final class WorkspaceNumbers {
     private var observers: [() -> Void] = []
     /// Called at the end of every arrangement, once the coordinator has re-read the windows.
     var onArranged: (() -> Void)?
+    /// Called when `follow-space-order` renumbers, before observers hear of it, with the UUIDs of the displays
+    /// whose workspaces changed number.
+    var onRenumbered: ((Set<String>) -> Void)?
     private var pending: DispatchWorkItem?
     private var arranging = false
     /// Spaces this removed, whose `spaceDestroyed` events are not news.
@@ -50,12 +54,13 @@ final class WorkspaceNumbers {
         let model = AppState.shared.displays
         knownDisplays = Set(model.displays.map(\.uuid))
         var main = model.displays.first(where: \.isMain)?.uuid
-        // A display coming or going, or another becoming main, moves workspaces.
+        // A display coming or going, or another becoming main, moves workspaces. The same displays may have had
+        // their Spaces reordered.
         model.observe { [weak self] model in
             guard let self else { return }
             let now = Set(model.displays.map(\.uuid))
             let nowMain = model.displays.first(where: \.isMain)?.uuid
-            guard now != knownDisplays || nowMain != main else { return }
+            guard now != knownDisplays || nowMain != main else { return followSpaceOrder(model) }
             let (connected, disconnected) = (now.subtracting(knownDisplays), knownDisplays.subtracting(now))
             (knownDisplays, main) = (now, nowMain)
             if !connected.isEmpty { print("displays: connected \(connected.sorted())") }
@@ -107,6 +112,8 @@ final class WorkspaceNumbers {
             return !Set(binding.values).isSubset(of: model.displays.flatMap(\.userSpaces))
         }
         if unlisted() { _ = waitUntil(2) { !unlisted() } }
+        // Following the Space order, Spaces reordered since the last run are renumbered rather than put back.
+        if AppState.shared.config.followSpaceOrder { binding = plan.renumbered(planDisplays(), binding: binding) }
         var completed = false
         for _ in 0..<50 {
             let displays = planDisplays()
@@ -145,8 +152,9 @@ final class WorkspaceNumbers {
     private func numberInPlace() {
         let displays = planDisplays()
         let start = binding
-        let step = WorkspacePlan(AppState.shared.config)
-            .step(displays, binding: binding, occupied: occupiedSpaces(among: displays.flatMap(\.spaces)))
+        let plan = WorkspacePlan(AppState.shared.config)
+        if AppState.shared.config.followSpaceOrder { binding = plan.renumbered(displays, binding: binding) }
+        let step = plan.step(displays, binding: binding, occupied: occupiedSpaces(among: displays.flatMap(\.spaces)))
         binding = step.binding
         if case .move(let from, let to) = step.action, let n = binding.first(where: { $0.value == to })?.key {
             binding[n] = from
@@ -156,11 +164,32 @@ final class WorkspaceNumbers {
         onArranged?()
     }
 
+    /// With `follow-space-order`, renumbers the workspaces to the order their Spaces now have, after a drag in
+    /// Mission Control or macOS rearranging them. Only the numbers change; windows stay on their Spaces.
+    private func followSpaceOrder(_ model: DisplayModel) {
+        guard AppState.shared.config.followSpaceOrder, !arranging else { return }
+        let start = binding
+        binding = WorkspacePlan(AppState.shared.config).renumbered(planDisplays(model), binding: binding)
+        guard binding != start else { return }
+        print("workspaces: renumbered to follow the Space order")
+        let moved = Set(binding.filter { start[$0.key] != $0.value }.values)
+        onRenumbered?(Set(model.displays.filter { $0.userSpaces.contains(where: moved.contains) }.map(\.uuid)))
+        announce(since: start)
+        fflush(stdout)
+        // Layout settings go by workspace number, so each Space's are resolved again.
+        if AppState.shared.enabled { AppState.shared.coordinator?.reconcile() }
+    }
+
     /// The displays as the plan sees them, read afresh.
     private func planDisplays() -> [PlanDisplay] {
         let model = AppState.shared.displays
         model.reconcile()
-        return model.displays.map {
+        return planDisplays(model)
+    }
+
+    /// The displays as the model last read them.
+    private func planDisplays(_ model: DisplayModel) -> [PlanDisplay] {
+        model.displays.map {
             PlanDisplay(uuid: $0.uuid, monitor: model.monitor($0), spaces: $0.userSpaces, current: $0.currentSpaceID)
         }
     }

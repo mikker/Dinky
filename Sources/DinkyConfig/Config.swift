@@ -12,6 +12,8 @@ public struct Config: Equatable {
     /// `[workspace-to-display]`: by workspace number, the display patterns it lives on, the first that matches
     /// a connected display winning. Other workspaces, and these when no pattern matches, live on the main display.
     public var workspaceDisplays: [Int: [MonitorPattern]] = [:]
+    /// Renumber workspaces when their Spaces are reordered, rather than moving windows back to keep the numbers.
+    public var followSpaceOrder = false
     /// Workspace layout, with 'tiles' retained as the old name for dwindle.
     public var defaultLayout = LayoutKind.tiles
     /// Whether dinky tiles numbered workspaces unless overridden.
@@ -109,6 +111,7 @@ public struct Config: Equatable {
             }
             try assignments.done()
         }
+        followSpaceOrder = try t.bool("follow-space-order") ?? followSpaceOrder
         defaultLayout = try t.choice("default-layout") ?? defaultLayout
         defaultTiling = try t.bool("default-tiling") ?? defaultTiling
         if let workspacesTable = try t.table("workspace") {

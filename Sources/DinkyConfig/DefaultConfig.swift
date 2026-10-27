@@ -10,6 +10,7 @@ extension Config {
 
     start-at-login = true
     workspaces = 5                  # across all displays, one native Space each
+    follow-space-order = false      # true renumbers workspaces when you reorder Spaces in Mission Control
     default-layout = 'tiles'        # tiles (dwindle) | dwindle | accordion | fixed | scrolling | master
     default-tiling = true           # false leaves workspaces untiled unless overridden
     follow-app-activation = true    # Cmd-Tab and Dock clicks switch Spaces the fast way

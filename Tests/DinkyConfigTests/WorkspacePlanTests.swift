@@ -175,4 +175,49 @@ struct WorkspacePlanTests {
             #expect(world.windows[world.binding[5]!] == 1, "workspace 5's window travels with it")
         }
     }
+
+    @Test func `Following the Space order renumbers without moving windows`() {
+        let plan = WorkspacePlan(count: 5, assignments: [:])
+        var world = World(displays: [Self.display("L", "Built-in", main: true, count: 1, [1, 2, 3, 4, 5])])
+        world.windows = [1: 1, 3: 2]
+        world.settle(plan)
+        // Dragged to the front in Mission Control, Space 3 becomes the first.
+        world.displays[0].spaces = [3, 1, 2, 4, 5]
+        world.binding = plan.renumbered(world.displays, binding: world.binding)
+        #expect(world.binding == [1: 3, 2: 1, 3: 2, 4: 4, 5: 5])
+        #expect(plan.renumbered(world.displays, binding: world.binding) == world.binding, "already in order")
+        world.settle(plan)
+        #expect(world.actions == [], "the next arrangement has nothing to move")
+        #expect(world.windows == [1: 1, 3: 2])
+    }
+
+    @Test func `Without following, a reordered Space's windows go back to its number's place`() {
+        let plan = WorkspacePlan(count: 5, assignments: [:])
+        var world = World(displays: [Self.display("L", "Built-in", main: true, count: 1, [1, 2, 3, 4, 5])])
+        world.windows = [3: 2]
+        world.settle(plan)
+        world.displays[0].spaces = [3, 1, 2, 4, 5]
+        world.settle(plan)
+        #expect(world.numbers(on: "L") == [1, 2, 3, 4, 5])
+        #expect(world.windows[world.binding[3]!] == 2, "workspace 3's windows are third again")
+        #expect(world.binding[3] != 3)
+    }
+
+    @Test func `Following the Space order keeps each display's numbers`() {
+        var world = World(displays: [Self.display("P", "PG27UCDM", main: true, count: 2, [1, 2, 3, 4]),
+                                     Self.display("S", "LS24D60xU", main: false, count: 2, [9])])
+        world.settle(fivePlusSide)
+        world.displays[0].spaces = [4, 3, 2, 1]
+        #expect(fivePlusSide.renumbered(world.displays, binding: world.binding) == [1: 4, 2: 3, 3: 2, 4: 1, 5: 9])
+
+        // Space 2 dragged onto the side display: workspace 2 lives on the main one, so it keeps its number there
+        // and the plan puts it back on the main display, as without following.
+        world.displays[0].spaces = [1, 3, 4]
+        world.displays[1].spaces = [2, 9]
+        world.binding = [1: 1, 2: 2, 3: 3, 4: 4, 5: 9]
+        #expect(fivePlusSide.renumbered(world.displays, binding: world.binding) == world.binding)
+        world.settle(fivePlusSide)
+        #expect(world.numbers(on: "P") == [1, 2, 3, 4])
+        #expect(world.numbers(on: "S") == [5])
+    }
 }

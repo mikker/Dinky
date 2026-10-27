@@ -17,6 +17,11 @@
       "default": 5,
       "description": "Workspaces across all displays, numbered from 1, one native Space each. dinky creates and removes Spaces to match."
     },
+    "follow-space-order": {
+      "type": "boolean",
+      "default": false,
+      "description": "Renumber workspaces when Spaces are reordered in Mission Control: on each display the leftmost Space becomes its lowest-numbered workspace, and windows stay put. False keeps each workspace's number and moves its windows back at the next arrangement."
+    },
     "workspace-to-display": {
       "type": "object",
       "description": "By workspace number, the display it lives on: a pattern (main, secondary, or a case-insensitive part of the display's name as `dinky list-displays` prints it) or a list of them, the first that matches a connected display winning. Other workspaces, and these when no pattern matches, live on the main display.",
