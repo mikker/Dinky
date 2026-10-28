@@ -2,12 +2,16 @@ import Foundation
 
 /// One `[[rules]]` entry: when a new window matches every condition that is set, run the commands.
 /// `app-id` is an exact bundle ID; `app-id-regex`, `app-name` and `title` are case-insensitive
-/// regexes found anywhere in the text.
+/// regexes found anywhere in the text. `window-identifier` matches AXIdentifier; its exclusion
+/// rejects matching identifiers before any commands are queued. Missing identifiers do not match
+/// a positive selector and do not trigger an exclusion.
 public struct WindowRule: Equatable {
     public var appId: String?
     public var appIdRegex: String?
     public var appName: String?
     public var title: String?
+    public var windowIdentifier: String?
+    public var excludeWindowIdentifier: String?
     public var kind: WindowKind?
     public var run: [String] = []
 
@@ -18,6 +22,8 @@ public struct WindowRule: Equatable {
         appIdRegex = try regex(t, "app-id-regex")
         appName = try regex(t, "app-name")
         title = try regex(t, "title")
+        windowIdentifier = try regex(t, "window-identifier")
+        excludeWindowIdentifier = try regex(t, "exclude-window-identifier")
         kind = try t.choice("kind")
         guard let run = try t.commands("run") else { throw ConfigError(path: t.path("run"), "missing, every rule needs 'run'") }
         self.run = run
@@ -25,13 +31,17 @@ public struct WindowRule: Equatable {
     }
 
     /// Whether every condition that is set holds for this window.
-    public func matches(appId: String?, appName: String?, title: String, kind: WindowKind) -> Bool {
+    public func matches(appId: String?, appName: String?, title: String, kind: WindowKind, windowIdentifier: String? = nil) -> Bool {
         func search(_ pattern: String?, _ text: String?) -> Bool {
             guard let pattern else { return true }
             return text?.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
         }
         return (self.appId == nil || self.appId == appId) && (self.kind == nil || self.kind == kind)
             && search(appIdRegex, appId) && search(self.appName, appName) && search(self.title, title)
+            && search(self.windowIdentifier, windowIdentifier)
+            && (excludeWindowIdentifier.map { pattern in
+                windowIdentifier?.range(of: pattern, options: [.regularExpression, .caseInsensitive]) == nil
+            } ?? true)
     }
 }
 

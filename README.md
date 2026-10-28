@@ -26,4 +26,7 @@ Learn more:
 - [Configuration](https://dinky.rodeo/configuration/)
 - [Commands](https://dinky.rodeo/commands/)
 
+Window rules can match or exclude Accessibility identifiers to distinguish auxiliary
+windows from documents with the same title. See [window rules](https://dinky.rodeo/configuration/#rules).
+
 MIT licensed.

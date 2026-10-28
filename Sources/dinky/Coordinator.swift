@@ -38,6 +38,8 @@ final class Coordinator {
     func isBorderWindow(_ id: WindowID) -> Bool { borders?.isBorder(id) ?? false }
     private(set) var workspaces: [UInt64: Workspace] = [:]
     var placements: [WindowID: Placement] = [:]
+    /// AX identifiers read during classification. Cached so diagnostic queries never block on AX.
+    var windowIdentifiers: [WindowID: String] = [:]
     var dirty: Set<UInt64> = []
     /// Counts overlapping full writes so an older completion cannot expose a newer pass's events.
     private var applying: [UInt64: Int] = [:]
@@ -353,6 +355,7 @@ final class Coordinator {
     }
 
     private func forget(_ id: WindowID) {
+        windowIdentifiers[id] = nil
         attempts[id] = nil
         adoptTargets[id] = nil
         adopting.remove(id)

@@ -83,6 +83,7 @@ func listWindows(_ query: WindowQuery) -> Reply {
         var values = now.monitorValues(i).merging(n.map { now.workspaceValues($0, space: sid, on: display) } ?? [:]) { a, _ in a }
         values.merge([
             "window-id": "\(window.id)", "window-title": window.title,
+            "window-identifier": coordinator?.windowIdentifiers[window.id] ?? "",
             "window-layout": layout, "window-parent-container-layout": layout,
             "window-is-floating": "\(layout == "floating")", "window-is-fullscreen": "\(layout == "fullscreen")",
             "app-name": app?.localizedName ?? window.app, "app-bundle-id": app?.bundleIdentifier ?? "",

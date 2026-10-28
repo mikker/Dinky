@@ -43,7 +43,7 @@ public struct WorkspaceQuery: Equatable, Sendable {
 }
 
 public struct WindowQuery: Equatable, Sendable {
-    public static let variables = ["window-id", "window-title", "window-layout", "window-parent-container-layout",
+    public static let variables = ["window-id", "window-title", "window-identifier", "window-layout", "window-parent-container-layout",
                                    "window-is-floating", "window-is-fullscreen", "app-name", "app-bundle-id", "app-pid",
                                    "workspace", "workspace-is-focused", "workspace-is-visible", "workspace-layout",
                                    "monitor-id", "monitor-name", "monitor-is-main"]
