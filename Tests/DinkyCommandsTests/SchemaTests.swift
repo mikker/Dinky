@@ -156,6 +156,8 @@ struct SchemaTests {
         app-id = 'com.apple.Safari'
         app-id-regex = '^com\\.apple\\.'
         app-name = 'safari'
+        window-identifier = '^Settings$'
+        exclude-window-identifier = '^Inspector$'
         title = 'settings'
         kind = 'dialog'
         run = ['layout floating', 'move-window-to-workspace 2']

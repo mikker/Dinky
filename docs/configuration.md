@@ -399,6 +399,8 @@ it goes instead.
 | `app-id-regex` | Case-insensitive regex, matched against the bundle ID. |
 | `app-name` | Case-insensitive regex. |
 | `title` | Case-insensitive regex. |
+| `window-identifier` | Case-insensitive regex against the window's `AXIdentifier`. |
+| `exclude-window-identifier` | Skip the rule when `AXIdentifier` matches this case-insensitive regex. |
 | `kind` | `'normal'`, `'dialog'`, `'sheet'` or `'panel'`. |
 | `run` | Required. A command or a list. |
 
@@ -409,6 +411,45 @@ it goes instead.
 app-id = 'com.apple.Music'
 run = ['layout floating', 'move-window-to-workspace 5']
 ```
+
+### Distinguishing auxiliary windows
+
+Some apps give document and auxiliary windows the same title and window kind.
+Use their Accessibility identifiers to keep document windows tiled while a
+specific settings window floats. All selectors are combined: an exclusion
+prevents every command in that rule, including workspace moves, from running.
+For example, using an illustrative app and identifier:
+
+```toml
+[[rules]]
+app-id = 'com.example.editor'
+exclude-window-identifier = '^DocumentSettingsWindow$'
+run = ['layout tiling', 'move-window-to-workspace 4 --follow']
+
+[[rules]]
+app-id = 'com.example.editor'
+window-identifier = '^DocumentSettingsWindow$'
+run = 'layout floating'
+```
+
+Patterns search anywhere in the identifier; anchor with `^` and `$` for an exact
+match. A missing or unreadable identifier never matches `window-identifier` and
+is not rejected by `exclude-window-identifier`. Existing rules without these
+selectors behave as before. Rules still run when a window is first classified;
+reloading the config does not reclassify an existing window.
+
+Discover identifiers with:
+
+```sh
+dinky list-windows --all --format '%{app-name} | %{window-id} | %{window-identifier}'
+```
+
+`debug-state` also includes `window-identifier` for each window. These values
+are cached from classification to avoid extra Accessibility queries during
+diagnostics. The list variable is empty, and the JSON field is `null`, when the
+identifier is unavailable or the window has not yet been classified. Some apps
+do not expose identifiers. Dialogs, panels and fixed-size windows retain their
+usual floating behavior.
 
 ## `[mode.<name>]`
 

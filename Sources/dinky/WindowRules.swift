@@ -25,11 +25,13 @@ extension Coordinator {
         var resizable: DarwinBoolean = false
         AXUIElementIsAttributeSettable(element, kAXSizeAttribute as CFString, &resizable)
         let title = axString(element, kAXTitleAttribute) ?? ""
+        let identifier = axString(element, "AXIdentifier").flatMap { $0.isEmpty ? nil : $0 }
+        windowIdentifiers[window.id] = identifier
         // `layout floating` and `layout tiling` decide here, the last one wins. Other rule commands, such as
         // move-window-to-workspace, run for this window once it is placed.
         var floats: Bool?
         var runsRules = false
-        for command in config.commands(for: window, kind: kind, title: title) {
+        for command in config.commands(for: window, kind: kind, title: title, identifier: identifier) {
             switch command {
             case .layout([.floating]): floats = true
             case .layout([.tiling]): floats = false
@@ -78,8 +80,8 @@ private func buttonEnabled(_ element: AXUIElement, _ attribute: String) -> Bool 
 
 extension Config {
     /// The commands of every rule that matches, in order. Commands that do not parse are skipped.
-    func commands(for window: Window, kind: WindowKind, title: String) -> [Command] {
-        rules.filter { $0.matches(appId: window.bundleID, appName: window.appName, title: title, kind: kind) }
+    func commands(for window: Window, kind: WindowKind, title: String, identifier: String? = nil) -> [Command] {
+        rules.filter { $0.matches(appId: window.bundleID, appName: window.appName, title: title, kind: kind, windowIdentifier: identifier) }
             .flatMap { $0.run.compactMap { try? Command.parse($0) } }
     }
 }

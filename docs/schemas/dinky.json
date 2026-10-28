@@ -277,6 +277,8 @@
           "app-id-regex": { "type": "string", "minLength": 1, "description": "Case-insensitive regex found anywhere in the app's bundle ID, e.g. ^com\\.apple\\. for every Apple app." },
           "app-name": { "type": "string", "minLength": 1, "description": "Case-insensitive regex found anywhere in the app's name." },
           "title": { "type": "string", "minLength": 1, "description": "Case-insensitive regex found anywhere in the window title." },
+          "window-identifier": { "type": "string", "minLength": 1, "description": "Case-insensitive regex found anywhere in AXIdentifier. An unavailable identifier never matches." },
+          "exclude-window-identifier": { "type": "string", "minLength": 1, "description": "Reject this rule when AXIdentifier matches this case-insensitive regex. Unavailable identifiers are not excluded." },
           "kind": { "type": "string", "enum": ["normal", "dialog", "sheet", "panel"], "description": "The kind of window." },
           "run": { "$ref": "#/definitions/commands", "description": "The command or commands to run for a matching window." }
         }

@@ -104,7 +104,7 @@ Cmd-W that the app keeps around. Format variables:
 - Workspaces: `workspace`, `workspace-is-focused`, `workspace-is-visible`,
   `workspace-layout` (`dwindle`, `fixed`, `master` or `scrolling`, empty on a
   full-screen Space), `monitor-id`, `monitor-name`, `monitor-is-main`
-- Windows: `window-id`, `window-title`, `window-layout`,
+- Windows: `window-id`, `window-title`, `window-identifier`, `window-layout`,
   `window-parent-container-layout`, `window-is-floating`,
   `window-is-fullscreen`, `app-name`, `app-bundle-id`, `app-pid`, and the
   workspace variables
