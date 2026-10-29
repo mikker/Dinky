@@ -43,7 +43,7 @@ extension Config {
 
     [master]
     size = 0.6                      # the master's share of the display beside the stack; alone it fills it
-    side = 'left'                   # left | right: the master's side
+    side = 'left'                   # left | right | center: the master's side
 
     [gaps]
     inner = 8                       # or { horizontal = 8, vertical = 8 }

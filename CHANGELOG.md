@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Layout
+
+- `[master] side = 'center'` centres the master for wide displays, after Hyprland's `orientation = center`. From the second stacked window on, the master takes the middle and the stack splits in two beside it: new windows alternate right and left, and the stacks stay even as windows close. With one window stacked, the master takes the left.
+
 ## 0.23
 
 ### Configuration

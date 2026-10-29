@@ -174,6 +174,14 @@ first window fills the display alone; the second opens the stack and later ones
 join its bottom. When the master closes, the top of the stack takes its place;
 when the stack empties, the master fills the display again.
 
+With `side = 'center'`, the second stacked window moves the master to the
+middle of the display and opens a stack on its left. Later windows join the
+shorter stack, the right one on a tie, so they alternate right and left; when
+one closes, the bottom of the longer stack moves over to keep them even. With
+one window stacked, the master takes the left, as Hyprland's does. `layout`
+changes both stacks, `swap-with-master` trades the master with the top of the
+right one, and `resize width` on the master widens it evenly into both.
+
 A workspace that switches to the master layout, such as after you change its
 `layout`, makes the focused window the master and stacks the others beside it
 in their order: as an accordion if most of them were in one, else as tiles.
@@ -212,7 +220,7 @@ its own.
 | Key | Default | |
 |---|---|---|
 | `size` | `0.6` | The master's share of the display inside the outer gaps while windows are stacked beside it, from `0.1` to `0.9`. Hyprland calls it `mfact`. It applies to a stack opened later and to `balance-sizes`. |
-| `side` | `'left'` | The side the master takes: `'left'` or `'right'`. The stack goes on the other. Hyprland calls it `orientation`. |
+| `side` | `'left'` | The side the master takes: `'left'`, `'right'` or `'center'`. The stack goes on the other; with `'center'`, for wide displays, the master takes the middle once two windows are stacked and they split between a stack on each side. Hyprland calls it `orientation`. |
 
 </div>
 
@@ -475,7 +483,7 @@ column-width = 0.49             # a new column's share of the display; a lone co
 
 [master]
 size = 0.6                      # the master's share of the display beside the stack; alone it fills it
-side = 'left'                   # left | right: the master's side
+side = 'left'                   # left | right | center: the master's side
 
 [gaps]
 inner = 8                       # or { horizontal = 8, vertical = 8 }
