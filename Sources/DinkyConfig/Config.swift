@@ -297,7 +297,8 @@ public struct Master: Equatable {
     /// The master's share of the display's width inside the outer gaps while other windows are stacked beside it.
     /// Hyprland calls it `mfact`. Alone, the master fills the display.
     public var size = 0.6
-    /// The side the master takes; the stack goes on the other. Hyprland calls it `orientation`.
+    /// The side the master takes; the stack goes on the other, or on both of a centred master. Hyprland calls it
+    /// `orientation`.
     public var side = MasterSide.left
 
     public init() {}
@@ -311,7 +312,7 @@ public struct Master: Equatable {
 }
 
 public enum MasterSide: String, CaseIterable {
-    case left, right
+    case left, right, center
 }
 
 /// Below the target, or above it as a ring that never covers content or takes clicks.

@@ -461,3 +461,136 @@ private extension Workspace {
         return copy.move(direction)
     }
 }
+
+struct MasterCenterTests {
+    @Test func `With one window stacked the centred master takes the left`() {
+        let f = frames(master(2, .center))
+        #expect(f[1] == rect(0, 0, 600, 600))
+        #expect(f[2] == rect(600, 0, 400, 600))
+    }
+
+    @Test func `The second stacked window centres the master and opens the left stack`() {
+        let f = frames(master(3, .center))
+        #expect(f[3] == rect(0, 0, 200, 600))
+        #expect(f[1] == rect(200, 0, 600, 600))
+        #expect(f[2] == rect(800, 0, 200, 600), "the first stacked window stays on the right")
+    }
+
+    @Test func `New windows alternate between the stacks, right first`() {
+        let ws = master(5, .center)
+        #expect(ws.windows == [3, 5, 1, 2, 4])
+        #expect(ws.masterOrder == [1, 2, 3, 4, 5])
+        let f = frames(ws)
+        #expect(f[2] == rect(800, 0, 200, 300))
+        #expect(f[4] == rect(800, 300, 200, 300))
+        #expect(f[5] == rect(0, 300, 200, 300))
+    }
+
+    @Test func `Gaps go between the stacks and the centred master`() {
+        var ws = Workspace(bounds: rect(0, 0, 1000, 600), gaps: Gaps(all: 10), algorithm: .master)
+        ws.setMasterSide(.center)
+        for id: WindowID in [1, 2, 3] { ws.insert(id) }
+        let f = frames(ws)
+        #expect(f[3] == rect(10, 10, 192, 580))
+        #expect(f[1] == rect(212, 10, 576, 580))
+        #expect(f[2] == rect(798, 10, 192, 580))
+    }
+
+    @Test func `Closing a window keeps the stacks even`() {
+        var ws = master(4, .center)
+        ws.remove(3)
+        #expect(ws.windows == [4, 1, 2], "the bottom of the right stack opens the left one again")
+        #expect(frames(ws)[4] == rect(0, 0, 200, 600))
+        #expect(frames(ws)[1] == rect(200, 0, 600, 600))
+        var five = master(5, .center)
+        five.remove(2)
+        five.remove(4)
+        #expect(five.windows == [3, 1, 5], "the left stack hands its bottom to the emptied right one")
+        var master5 = master(5, .center)
+        master5.remove(1)
+        master5.remove(4)
+        #expect(master5.windows == [3, 2, 5], "so does it when the right one empties for a closing master")
+    }
+
+    @Test func `With one window left stacked the master goes back to the left`() {
+        var ws = master(3, .center)
+        ws.remove(3)
+        #expect(frames(ws)[1] == rect(0, 0, 600, 600))
+        #expect(frames(ws)[2] == rect(600, 0, 400, 600))
+        var right = master(3, .center)
+        right.remove(2)
+        #expect(right.windows == [1, 3], "the left stack comes round to the right")
+        #expect(frames(right)[3] == rect(600, 0, 400, 600))
+        right.insert(4)
+        #expect(right.windows == [4, 1, 3])
+    }
+
+    @Test func `Closing the centred master promotes the top of the right stack`() {
+        var ws = master(4, .center)
+        ws.focus(1)
+        ws.remove(1)
+        #expect(ws.focused == 2)
+        #expect(ws.windows == [3, 2, 4])
+        #expect(frames(ws)[2] == rect(200, 0, 600, 600))
+        var three = master(3, .center)
+        three.remove(1)
+        #expect(three.windows == [2, 3])
+        #expect(frames(three)[2] == rect(0, 0, 600, 600))
+    }
+
+    @Test func `Resizing the centred master widens it into both stacks and survives the row changing`() {
+        var ws = master(3, .center)
+        ws.focus(1)
+        let widened = ws.resize(by: 100, along: .horizontal)
+        #expect(widened)
+        #expect(frames(ws)[1] == rect(150, 0, 700, 600))
+        #expect(frames(ws)[3] == rect(0, 0, 150, 600))
+        ws.remove(3)
+        #expect(frames(ws)[1] == rect(0, 0, 700, 600), "the master keeps its share beside one stack")
+        ws.insert(4)
+        #expect(frames(ws)[1] == rect(150, 0, 700, 600))
+        ws.balanceSizes()
+        #expect(frames(ws)[1] == rect(200, 0, 600, 600))
+    }
+
+    @Test func `Layout commands change both stacks`() {
+        var ws = master(2, .center)
+        ws.setLayout(.accordion, nil)
+        ws.insert(3)
+        #expect(ws.container(of: 3)?.mode == .accordion, "a stack opened later takes the mode")
+        ws.setLayout(.tiles, nil)
+        #expect(ws.container(of: 2)?.mode == .tiles)
+        #expect(ws.container(of: 3)?.mode == .tiles)
+    }
+
+    @Test func `Swapping from the centred master trades it with the top of the right stack`() {
+        var ws = master(4, .center)
+        ws.focus(1)
+        let swapped = ws.swapWithMaster()
+        #expect(swapped)
+        #expect(ws.masterWindow == 2)
+        #expect(ws.focused == 1)
+        #expect(frames(ws)[1] == rect(800, 0, 200, 300))
+    }
+
+    @Test func `Focus and move cross the master between the stacks`() {
+        var ws = master(3, .center)
+        ws.focus(1)
+        let left = ws.focus(.left)
+        #expect(left)
+        #expect(ws.focused == 3)
+        let moved = ws.move(.right)
+        #expect(moved)
+        #expect(ws.masterWindow == 3, "move swaps with the neighbour, keeping the shape")
+        #expect(ws.windows == [1, 3, 2])
+    }
+
+    @Test func `Switching the side to center and back keeps the master order`() {
+        var ws = master(4)
+        ws.setMasterSide(.center)
+        #expect(ws.windows == [3, 1, 2, 4])
+        #expect(frames(ws)[1] == rect(200, 0, 600, 600))
+        ws.setMasterSide(.left)
+        #expect(ws.windows == [1, 2, 3, 4])
+    }
+}

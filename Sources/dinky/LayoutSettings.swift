@@ -22,5 +22,11 @@ extension WorkspaceSettings {
 
 extension Master {
     /// The side the master window takes, in the layout engine's terms.
-    var layoutSide: DinkyLayout.MasterSide { side == .left ? .left : .right }
+    var layoutSide: DinkyLayout.MasterSide {
+        switch side {
+        case .left: .left
+        case .right: .right
+        case .center: .center
+        }
+    }
 }

@@ -5,6 +5,10 @@
 - Releases are universal for Apple silicon and Intel Macs running macOS 15 or later, including Homebrew installs and Sparkle updates (#63, following #43; thanks @ChrisGVE for the proposal).
 - Onboarding explains that turning off macOS app-activation Space switching persists after dinky quits. `dinky doctor` shows how to restore it, including when `follow-app-activation` is off. Document the Quicksilver symptom and how to use Magnet or Rectangle with floating windows or dinky disabled (#62).
 
+### Layout
+
+- `[master] side = 'center'` centres the master for wide displays, after Hyprland's `orientation = center`. From the second stacked window on, the master takes the middle and the stack splits in two beside it: new windows alternate right and left, and the stacks stay even as windows close. With one window stacked, the master takes the left.
+
 ### Configuration
 
 - Window rules can match `window-identifier` or reject `exclude-window-identifier` using case-insensitive regexes against Accessibility's `AXIdentifier`. Exclusions skip the whole rule, including workspace moves. Inspect cached identifiers with `%{window-identifier}` in `list-windows` or `window-identifier` in `debug-state` (#59, thanks @albertomalossi; fixes #56).

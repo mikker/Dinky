@@ -91,6 +91,15 @@ when the master closes, the top of the stack takes its place.
 `swap-with-master` trades places with the master. `resize width` changes the
 master's share.
 
+On a wide display, `side = 'center'` puts the master in the middle once two
+windows are stacked, and new windows alternate between a stack on its right and
+one on its left.
+
+<figure>
+{% include figures/master-center.svg %}
+<figcaption>A centred master with three windows stacked.</figcaption>
+</figure>
+
 ```toml
 [workspace.3]
 layout = 'master'

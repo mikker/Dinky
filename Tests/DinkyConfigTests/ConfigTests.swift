@@ -290,7 +290,7 @@ struct ConfigTests {
         #expect(try Config.parse("[workspace.2]\nlayout = 'master'\n").workspaceLayouts[2]?.layout == .master)
         assertError("[master]\nsize = 0.95\n", path: "master.size", line: 2, contains: "0.1 to 0.9")
         assertError("[master]\nsize = nan\n", path: "master.size", line: 2, contains: "0.1 to 0.9")
-        assertError("[master]\nside = 'top'\n", path: "master.side", line: 2, contains: "'left', 'right'")
+        assertError("[master]\nside = 'top'\n", path: "master.side", line: 2, contains: "'left', 'right', 'center'")
     }
 
     @Test func `Syntax error has line`() {
