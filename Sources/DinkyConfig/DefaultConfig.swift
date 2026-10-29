@@ -74,6 +74,11 @@ extension Config {
     delay-ms = 100                  # how long the pointer rests on a window before it takes focus
     accordion-edges = true          # resting on a peeking accordion edge focuses that window
 
+    [swipe]
+    enabled = false                 # the Spaces swipe focuses the next window of a tiled workspace first
+    space-switch = 'instant'        # past the last window: instant (dinky's fast switch) | native (macOS's own)
+    vertical = false                # up and down too: windows above and below, then Mission Control or App Exposé
+
     [animations]
     enabled = true                  # windows glide to their tiles; off while Reduce Motion is on
     duration-ms = 150               # roughly how long a window takes to arrive

@@ -240,4 +240,25 @@ struct ScrollingCommandTests {
         #expect(shape(ws.root) == "h[1 2 3]")
         #expect(lefts(ws) == [-425, 50, 525], "columns 475 wide between the gutters")
     }
+
+    @Test func `A swipe goes to the next column until the last`() {
+        var ws = strip(3)
+        #expect(ws.swipeTarget(.left) == 2)
+        #expect(ws.swipeTarget(.right) == nil, "past the last column the swipe switches Space")
+        ws.focus(1)
+        #expect(ws.swipeTarget(.left) == nil)
+        #expect(ws.swipeTarget(.right) == 2)
+        #expect(ws.swipeTarget(.up) == nil && ws.swipeTarget(.down) == nil, "a column of one window")
+        #expect(strip(1).swipeTarget(.left) == nil && strip(1).swipeTarget(.right) == nil)
+    }
+
+    @Test func `A swipe leaves a stacked column for its neighbour, or moves within it`() {
+        var ws = strip(3)
+        ws.join(.left)
+        #expect(shape(ws.root) == "h[1 v[2 3]]")
+        #expect(ws.swipeTarget(.right) == nil)
+        #expect(ws.swipeTarget(.left) == 1)
+        #expect(ws.swipeTarget(.up) == 2)
+        #expect(ws.swipeTarget(.down) == nil, "past the bottom the swipe opens App Exposé")
+    }
 }

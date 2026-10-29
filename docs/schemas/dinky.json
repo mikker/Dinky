@@ -196,6 +196,24 @@
         }
       }
     },
+    "swipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The trackpad swipe that switches Spaces focuses the next window of a tiled workspace first, and switches Space past the last one.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "space-switch": {
+          "enum": ["instant", "native"],
+          "default": "instant",
+          "description": "How a swipe past the last window switches Space: instant, dinky's fast switch once the fingers lift, or native, macOS's own, where a full, quick swipe switches whichever window has focus."
+        },
+        "vertical": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether swipes up and down focus the windows below and above before Mission Control and App Exposé."
+        }
+      }
+    },
     "animations": {
       "type": "object",
       "additionalProperties": false,

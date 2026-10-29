@@ -303,6 +303,42 @@ fullscreen-width = 0.55
 
 </div>
 
+## `[swipe]`
+
+The trackpad swipe that switches Spaces moves between a tiled workspace's
+windows first, as niri's does along its columns. Swipe toward the next window,
+a column of a scrolling workspace, an accordion child or a tile, and dinky
+focuses it; swipe past the last one and the Space switches, as it always has.
+The swipe is whichever macOS uses to switch Spaces: three fingers, or four if
+**System Settings › Trackpad › More Gestures › Swipe between full-screen
+applications** says so. The swipe follows the content, as the Spaces do: move
+your fingers left to go to the window on the right.
+
+With `vertical = true` the swipe up and down moves focus between the windows
+above and below the same way, and only past the last one opens Mission
+Control or App Exposé.
+
+Up and down always go the `'native'` way, so macOS sees those swipes begin
+and end too, and a quick swipe down can open App Exposé even when dinky has
+moved focus. If App Exposé opens too readily, turn it off under **System
+Settings › Trackpad › More Gestures › App Exposé**. Mission Control keeps the
+swipe up.
+
+dinky reads the swipe from the Dock's private events, as it already switches
+Spaces with them, so a macOS update can break it. Each swipe moves one window.
+On a workspace with one window or none tiled, or while dinky is disabled, the
+swipe is macOS's own.
+
+<div class="wide-table" markdown="1">
+
+| Key | Default | |
+|---|---|---|
+| `enabled` | `false` | Sideways swipes focus the windows of tiled workspaces. |
+| `space-switch` | `'instant'` | How a swipe past the last window switches Space. `'instant'`: dinky keeps the swipe from macOS and switches with its own fast switch once your fingers lift. `'native'`: macOS sees the swipe begin and end, so a short swipe moves focus and a full, quick one switches Space whichever window has focus. |
+| `vertical` | `false` | Swipes up and down focus the windows below and above too, before Mission Control and App Exposé. They always go the `'native'` way. |
+
+</div>
+
 ## `[animations]`
 
 <div class="wide-table" markdown="1">
@@ -505,6 +541,11 @@ exclude-apps = []               # bundle IDs whose windows get no border
 enabled = false
 delay-ms = 100                  # how long the pointer rests on a window before it takes focus
 accordion-edges = true          # resting on a peeking accordion edge focuses that window
+
+[swipe]
+enabled = false                 # the Spaces swipe focuses the next window of a tiled workspace first
+space-switch = 'instant'        # past the last window: instant (dinky's fast switch) | native (macOS's own)
+vertical = false                # up and down too: windows above and below, then Mission Control or App Exposé
 
 [animations]
 enabled = true                  # windows glide to their tiles; off while Reduce Motion is on

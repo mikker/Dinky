@@ -485,6 +485,25 @@ struct ConfigTests {
         assertError("[focus-follows-mouse]\naccordion = true\n", path: "focus-follows-mouse.accordion", line: 2, contains: "unknown key")
     }
 
+    @Test func `Trackpad swipe`() throws {
+        let defaults = Config.default.swipe
+        #expect(defaults == Swipe())
+        #expect(!defaults.enabled)
+        #expect(defaults.spaceSwitch == .instant)
+        #expect(!defaults.vertical)
+        let swipe = try Config.parse("""
+        [swipe]
+        enabled = true
+        space-switch = 'native'
+        vertical = true
+        """).swipe
+        #expect(swipe.enabled)
+        #expect(swipe.spaceSwitch == .native)
+        #expect(swipe.vertical)
+        assertError("[swipe]\nspace-switch = 'slide'\n", path: "swipe.space-switch", line: 2, contains: "'instant', 'native'")
+        assertError("[swipe]\nfingers = 3\n", path: "swipe.fingers", line: 2, contains: "unknown key")
+    }
+
     @Test func `Animations and drag`() throws {
         #expect(Config.default.animations == Animations())
         #expect(Config.default.drag == Drag())

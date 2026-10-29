@@ -129,6 +129,11 @@ struct SchemaTests {
         delay-ms = 50
         accordion-edges = false
 
+        [swipe]
+        enabled = true
+        space-switch = 'native'
+        vertical = true
+
         [animations]
         enabled = true
         duration-ms = 100

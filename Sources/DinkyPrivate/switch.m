@@ -9,12 +9,14 @@
 
 // Private CGEvent field numbers for a synthetic Dock swipe.
 static const int kEventTypeField = 55;             // kCGSEventTypeField
+static const int kEventGesture = 29;               // kCGSEventGesture
 static const int kEventDockControl = 30;           // kCGSEventDockControl
 static const int kGestureHIDType = 110;            // kCGEventGestureHIDType
 static const int kHIDEventTypeDockSwipe = 23;      // kIOHIDEventTypeDockSwipe
 static const int kGestureSwipeMask = 115;          // kCGEventGestureSwipeMask
 static const int kGestureSwipeMotion = 123;        // kCGEventGestureSwipeMotion
 static const int kGestureMotionHorizontal = 1;     // kCGGestureMotionHorizontal
+static const int kGestureMotionVertical = 2;       // kCGGestureMotionVertical
 static const int kGestureSwipeProgress = 124;      // kCGEventGestureSwipeProgress
 static const int kGestureSwipePositionX = 125;     // kCGEventGestureSwipePositionX
 static const int kGestureSwipePositionY = 126;     // kCGEventGestureSwipePositionY
@@ -27,6 +29,19 @@ static const int kSourceUnixProcessIDAlias = 169;  // kCGEventSourceUnixProcessI
 static const int kPhaseBegan = 1;
 static const int kPhaseChanged = 2;
 static const int kPhaseEnded = 4;
+
+// Dock swipe events dinky posted that the swipe tap has not seen yet, and when the last was posted. A tap sees
+// dinky's own swipes as it sees the trackpad's; nothing that survives posting marks them, so they are counted
+// off as they come by, as iss does.
+static int own_dock_events = 0;
+static uint64_t own_dock_events_at = 0;
+
+static void post_dock_event(CGEventRef event)
+{
+    own_dock_events++;
+    own_dock_events_at = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+    CGEventPost(kCGSessionEventTap, event);
+}
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -252,9 +267,9 @@ static bool legacy_post_swipe(double sign, bool last)
     CGEventSetDoubleValueField(event, kGestureSwipeProgress, sign);
     CGEventSetDoubleValueField(event, kGestureSwipeVelocityX, sign * velocity);
     CGEventSetIntegerValueField(event, kGesturePhase, kPhaseBegan);
-    CGEventPost(kCGSessionEventTap, event);
+    post_dock_event(event);
     CGEventSetIntegerValueField(event, kGesturePhase, kPhaseEnded);
-    CGEventPost(kCGSessionEventTap, event);
+    post_dock_event(event);
     CFRelease(event);
     return true;
 }
@@ -270,7 +285,7 @@ static bool mimi_post_swipe(double sign)
             fprintf(stderr, "switch: failed to build augmented dock swipe event (phase=%d)\n", phases[i]);
             return false;
         }
-        CGEventPost(kCGSessionEventTap, event);
+        post_dock_event(event);
         CFRelease(event);
     }
     return true;
@@ -353,4 +368,71 @@ bool dinky_switch_to_space_index(int fromIndex, int toIndex, CFStringRef display
         return false;
     }
     return mimi_post_swipes(toIndex > fromIndex ? 1.0 : -1.0, abs(toIndex - fromIndex), displayID);
+}
+
+// Real Dock swipes, read by the trackpad swipe tap the way iss (github.com/joshuarli/iss) reads them.
+
+CGEventMask dinky_dock_swipe_event_mask(void)
+{
+    return (1ULL << kEventGesture) | (1ULL << kEventDockControl);
+}
+
+bool dinky_read_dock_swipe(CGEventRef event, DinkySwipePhase *phase, bool *vertical, int *direction)
+{
+    if (CGEventGetIntegerValueField(event, kEventTypeField) != kEventDockControl
+        || CGEventGetIntegerValueField(event, kGestureHIDType) != kHIDEventTypeDockSwipe) return false;
+    int64_t motion = CGEventGetIntegerValueField(event, kGestureSwipeMotion);
+    if (motion != kGestureMotionHorizontal && motion != kGestureMotionVertical) return false;
+    *vertical = motion == kGestureMotionVertical;
+    *phase = (DinkySwipePhase)CGEventGetIntegerValueField(event, kGesturePhase);
+    // The progress while the fingers move; a quick flick may only report a velocity as it ends.
+    double value = CGEventGetDoubleValueField(event, kGestureSwipeProgress);
+    if (value == 0.0) value = CGEventGetDoubleValueField(event, *vertical ? kGestureSwipeVelocityY : kGestureSwipeVelocityX);
+    if (value == 0.0) {
+        *direction = 0;
+    } else if (requires_augmentation()) {
+        // A real swipe's progress runs opposite to the sign a synthetic one is given toward the same Space: with
+        // natural scrolling on, positive heads for higher indices. Seen on 27.0.1; augmented_sign is its own inverse.
+        *direction = augmented_sign(value > 0.0 ? 1.0 : -1.0) > 0.0 ? -1 : 1;
+    } else {
+        // Toward higher indices is positive on macOS 26 and negative before it (iss).
+        bool reversed = NSProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26;
+        *direction = (value > 0.0) == reversed ? 1 : -1;
+    }
+    // Up and down run the other way round from sideways for the same sign. Seen on 27.0.1.
+    if (*vertical) *direction = -*direction;
+    return true;
+}
+
+bool dinky_is_gesture_event(CGEventRef event)
+{
+    return CGEventGetIntegerValueField(event, kEventTypeField) == kEventGesture;
+}
+
+void dinky_neutralize_dock_swipe(CGEventRef event)
+{
+    CGEventSetDoubleValueField(event, kGestureSwipeProgress, 0);
+    CGEventSetDoubleValueField(event, kGestureSwipeVelocityX, 0);
+    CGEventSetDoubleValueField(event, kGestureSwipeVelocityY, 0);
+}
+
+bool dinky_dock_swipe_needs_payload(void)
+{
+    return requires_augmentation();
+}
+
+bool dinky_take_own_dock_swipe(void)
+{
+    // Ones the tap never saw, because it was off or macOS dropped them, would pass real swipes for good.
+    if (own_dock_events > 0 && clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - own_dock_events_at > 1000000000ULL) {
+        own_dock_events = 0;
+    }
+    if (own_dock_events == 0) return false;
+    own_dock_events--;
+    return true;
+}
+
+void dinky_forget_own_dock_swipes(void)
+{
+    own_dock_events = 0;
 }

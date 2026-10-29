@@ -46,6 +46,25 @@ struct NeighborTests {
         ws.focus(1)
         #expect(ws.neighbor(of: 1, .right) == 2)
     }
+
+    @Test func `A swipe moves between tiles, then leaves them to macOS`() {
+        var ws = three()
+        #expect(ws.focused == 3)
+        #expect(ws.swipeTarget(.up) == 2)
+        #expect(ws.swipeTarget(.left) == 1)
+        #expect(ws.swipeTarget(.right) == nil && ws.swipeTarget(.down) == nil)
+        ws.focus(1)
+        #expect(ws.swipeTarget(.left) == nil && ws.swipeTarget(.up) == nil && ws.swipeTarget(.down) == nil)
+        #expect(workspace(1).swipeTarget(.left) == nil && workspace(1).swipeTarget(.right) == nil)
+    }
+
+    @Test func `A swipe moves along an accordion's children`() {
+        var ws = workspace(3, algorithm: .dwindle(.accordion))
+        #expect(ws.swipeTarget(.left) == 2)
+        #expect(ws.swipeTarget(.right) == nil)
+        ws.focus(1)
+        #expect(ws.swipeTarget(.right) == 2)
+    }
 }
 
 struct SwapAndMoveTests {
