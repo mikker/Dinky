@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- A command longer than 4 KiB that spans several lines, such as a multi-line `exec-and-forget` script, reaches the app whole. Before, the app stopped reading at the first 4 KiB chunk holding a newline, ran the cut-off script and still answered `ok`.
+
+### Other
+
+- The socket's read and write helpers moved into a `DinkySocket` module with unit tests.
+
 ## 0.23
 
 ### Configuration
