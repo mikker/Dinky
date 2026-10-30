@@ -1,8 +1,10 @@
+import DinkySocket
 import Foundation
 
 // The CLI talks to the app over a unix socket at $TMPDIR/dinky.sock (the per-user temp dir, the same
 // for the app and a shell). One request per connection: the client writes a command line ending in
-// "\n"; the app answers "ok\n" or "error\n" followed by the reply text, then closes the connection.
+// "\n" and closes its writing half; the app answers "ok\n" or "error\n" followed by the reply text,
+// then closes the connection.
 
 let socketPath = (NSTemporaryDirectory() as NSString).appendingPathComponent("dinky.sock")
 
@@ -28,7 +30,7 @@ final class SocketServer {
             guard client >= 0 else { return }
             var timeout = timeval(tv_sec: 2, tv_usec: 0)
             setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
-            let line = readAll(client, untilNewline: true).trimmingCharacters(in: .whitespacesAndNewlines)
+            let line = readAll(client).trimmingCharacters(in: .whitespacesAndNewlines)
             let reply = DispatchQueue.main.sync { handle(line) }
             writeAll(client, (reply.ok ? "ok\n" : "error\n") + reply.text)
             close(client)
@@ -57,7 +59,7 @@ func sendToApp(_ line: String) -> Reply? {
     signal(SIGPIPE, SIG_IGN)
     writeAll(fd, line + "\n")
     shutdown(fd, SHUT_WR)
-    let response = readAll(fd, untilNewline: false)
+    let response = readAll(fd)
     guard let newline = response.firstIndex(of: "\n") else { return .error("no reply from the app") }
     return Reply(ok: response[..<newline] == "ok", text: String(response[response.index(after: newline)...]))
 }
@@ -80,26 +82,5 @@ private func withAddress(_ path: String, _ body: (UnsafePointer<sockaddr>, sockl
     }
     return withUnsafePointer(to: &addr) {
         $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { body($0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
-    }
-}
-
-private func readAll(_ fd: Int32, untilNewline: Bool) -> String {
-    var data = [UInt8]()
-    var buffer = [UInt8](repeating: 0, count: 4096)
-    while data.count < 1 << 20 {
-        let n = read(fd, &buffer, buffer.count)
-        guard n > 0 else { break }
-        data += buffer[..<n]
-        if untilNewline, buffer[..<n].contains(UInt8(ascii: "\n")) { break }
-    }
-    return String(decoding: data, as: UTF8.self)
-}
-
-private func writeAll(_ fd: Int32, _ string: String) {
-    var bytes = Array(string.utf8)[...]
-    while !bytes.isEmpty {
-        let n = bytes.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
-        guard n > 0 else { return }
-        bytes = bytes.dropFirst(n)
     }
 }

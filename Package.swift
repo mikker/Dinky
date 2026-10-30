@@ -50,11 +50,21 @@ let package = Package(
             dependencies: ["DinkyConfig"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        // Reading and writing the CLI socket. Foundation only. Unit tested.
+        .target(
+            name: "DinkySocket",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "DinkySocketTests",
+            dependencies: ["DinkySocket"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
         // The app and CLI.
         .executableTarget(
             name: "dinky",
             dependencies: [
-                "DinkyPrivate", "DinkyLayout", "DinkyConfig", "DinkyCommands",
+                "DinkyPrivate", "DinkyLayout", "DinkyConfig", "DinkyCommands", "DinkySocket",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             swiftSettings: [.swiftLanguageMode(.v5)],
