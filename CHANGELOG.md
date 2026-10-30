@@ -9,6 +9,14 @@
 
 - Window rules can match `window-identifier` or reject `exclude-window-identifier` using case-insensitive regexes against Accessibility's `AXIdentifier`. Exclusions skip the whole rule, including workspace moves. Inspect cached identifiers with `%{window-identifier}` in `list-windows` or `window-identifier` in `debug-state` (#59, thanks @albertomalossi; fixes #56).
 
+### Fixes
+
+- A command longer than 4 KiB that spans several lines, such as a multi-line `exec-and-forget` script, reaches the app whole. Before, the app stopped reading at the first 4 KiB chunk holding a newline, ran the cut-off script and still answered `ok`.
+
+### Other
+
+- The socket's read and write helpers moved into a `DinkySocket` module with unit tests.
+
 ## 0.23
 
 ### Configuration
