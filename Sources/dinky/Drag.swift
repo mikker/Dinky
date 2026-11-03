@@ -23,6 +23,7 @@ struct DragHold {
 
 extension Coordinator {
     func noteFrameChange(of id: WindowID) {
+        guard !MissionControl.shared.active else { return }
         if dragging == id { return followDrag() }
         // Only tiled windows have a Space. Disabled, dinky leaves drags alone.
         guard enabled, dragging == nil, let key = placements[id]?.space, !isAnimating(id), mouseButtonDown,
@@ -70,7 +71,7 @@ extension Coordinator {
                 if let side = drop.side { $0.split(drop.target, with: id, on: side) } else { $0.swap(id, drop.target) }
             }
         }
-        dirty.insert(key)
+        layouts.dirty.insert(key)
         flush()
     }
 

@@ -195,9 +195,15 @@ public final class FrameScheduler: @unchecked Sendable {
             defer { app.steps = []; app.pending = []; app.batches = []; app.scheduled = false; app.prepared = true }
             return (app.steps, app.pending, app.batches, !app.prepared || app.forgotten, self.generation, app.latest)
         }
+        // An interrupted write may never have reached the window. Do not reuse its known-size shortcut.
+        if app.writtenGeneration != generation {
+            app.written = [:]
+            app.writtenGeneration = generation
+        }
         if needsPrepare { prepare(app.pid) }
         if !steps.isEmpty || !jobs.isEmpty { beforeBatch(app.pid) }
         for job in steps {
+            guard lock.withLock({ self.generation == generation }) else { break }
             app.written[job.id] == job.frame.size ? move(job) : write(job)
             app.written[job.id] = job.frame.size
             app.stepSizes[job.id, default: []].insert(job.frame.size)
@@ -311,6 +317,8 @@ public final class FrameScheduler: @unchecked Sendable {
     private final class App {
         let pid: Int32
         let queue: DispatchQueue
+        /// Known writes belong to one cancellation generation. Process queue only, like `written` below.
+        var writtenGeneration = -1
         var pending: [FrameJob] = []
         var revision = 0
         /// Submit revisions survive draining, so a newer request also supersedes an in-flight retry.

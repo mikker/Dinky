@@ -25,6 +25,7 @@ final class FrameApplier {
     private let raiseQueue = DispatchQueue(label: "dinky.frames.raise")
     /// A pass's raise waits for its slowest app, so a newer pass can raise first; the older one is then skipped.
     private let passes = LatestPasses()
+    private let writes = FrameWrites()
     private let minimumsURL: URL
 
     init(supportURL: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -36,8 +37,14 @@ final class FrameApplier {
         scheduler = FrameScheduler(
             beforeBatch: { pid in Self.suppressEnhancedUI(pid) },
             read: { [unowned self] job in withElement(pid: job.pid, id: job.id, frame) ?? nil },
-            write: { [unowned self] job in withElement(pid: job.pid, id: job.id) { write(job.frame, to: $0) } },
-            move: { [unowned self] job in withElement(pid: job.pid, id: job.id) { move(job.frame.origin, to: $0) } }
+            write: { [unowned self] job in
+                guard let permit = writes.permit else { return }
+                withElement(pid: job.pid, id: job.id) { write(job.frame, to: $0, permit: permit) }
+            },
+            move: { [unowned self] job in
+                guard let permit = writes.permit else { return }
+                withElement(pid: job.pid, id: job.id) { move(job.frame.origin, to: $0, permit: permit) }
+            }
         )
     }
 
@@ -86,11 +93,23 @@ final class FrameApplier {
         try? FileManager.default.removeItem(at: minimumsURL)
     }
 
-    /// Drops every frame not written yet.
-    func cancel() { scheduler.cancel() }
+    /// A completion holds the permit of its pass, so canceled readbacks cannot revive an old layout.
+    var permit: Int? { writes.permit }
+    func allows(_ permit: Int) -> Bool { writes.allows(permit) }
+
+    /// One lifecycle decision for the shared layout/restoration writer. Disabling invalidates automatic work
+    /// and permits intentional restoration; enabled overview rejects all new layout work. Calls already
+    /// admitted may finish, but no old frame, completion or raise permit revives across a transition.
+    func updateLayoutState(enabled: Bool, overview: Bool) {
+        let state: FrameWrites.State = !enabled ? .restoration : overview ? .overview : .layout
+        if writes.transition(to: state) { scheduler.cancel() }
+    }
 
     /// Writes one step of an animation: no readback, no retry, no raising.
-    func step(_ jobs: [FrameJob]) { scheduler.step(jobs) }
+    func step(_ jobs: [FrameJob]) {
+        guard writes.permit != nil else { return }
+        scheduler.step(jobs)
+    }
 
     /// Write every frame in `layout`, then raise overlapping windows into the layout's order if they are not,
     /// unless that would move focus away from a window other than `front`, the one the layout puts on top.
@@ -100,6 +119,7 @@ final class FrameApplier {
     /// that stops waiting for a hung app still has the others.
     func apply(_ layout: Layout, pids: [WindowID: pid_t], front: WindowID? = nil,
                progress: @escaping FrameScheduler.Completion = { _ in }, completion: @escaping ([FrameResult]) -> Void) {
+        guard let permit = writes.permit else { completion([]); return }
         let jobs = layout.order.compactMap { id in
             pids[id].map { FrameJob(pid: $0, id: id, frame: layout.frames[id]!) }
         }
@@ -110,24 +130,29 @@ final class FrameApplier {
             // A window that could not be read back is not raised: each lookup of it would block the raise queue
             // for a second.
             let unreadable = results.unreadable
-            raiseIntoOrder(layout, pids: pids.filter { !unreadable.contains($0.key) }, front: front, pass: pass)
+            raiseIntoOrder(layout, pids: pids.filter { !unreadable.contains($0.key) }, front: front,
+                           pass: pass, permit: permit)
             completion(results)
         }
     }
 
     /// Raise overlapping windows into the layout's order if they are not, as `apply` does after writing. Skipped
-    /// when a pass begun after `pass` (by default, now) includes any of the layout's windows: its order is newer.
-    func raiseIntoOrder(_ layout: Layout, pids: [WindowID: pid_t], front: WindowID?, pass: Int? = nil) {
-        let pass = pass ?? passes.begin(layout.order)
+    /// when a newer pass includes any of the layout's windows, or overview/cancellation interrupted it.
+    func raiseIntoOrder(_ layout: Layout, pids: [WindowID: pid_t], front: WindowID?) {
+        guard let permit = writes.permit else { return }
+        raiseIntoOrder(layout, pids: pids, front: front, pass: passes.begin(layout.order), permit: permit)
+    }
+
+    private func raiseIntoOrder(_ layout: Layout, pids: [WindowID: pid_t], front: WindowID?, pass: Int, permit: Int) {
         raiseQueue.async { [passes] in
-            guard passes.isLatest(pass, for: layout.order) else { return }
+            guard self.writes.allows(permit), passes.isLatest(pass, for: layout.order) else { return }
             var ids = layout.raises(current: onScreenOrder())
             // Raising makes a window its app's key window, so the front window goes last when its app had another
             // raised: it overlaps nothing (a column in view of a scrolling strip) and would lose focus otherwise.
             if let front, ids.last != front, let pid = pids[front], ids.contains(where: { pids[$0] == pid }) {
                 ids = ids.filter { $0 != front } + [front]
             }
-            if Self.raisingKeepsFocus(ids, front: front, pids: pids) { self.raise(ids, pids: pids) }
+            if Self.raisingKeepsFocus(ids, front: front, pids: pids) { self.raise(ids, pids: pids, permit: permit) }
         }
     }
 
@@ -184,10 +209,14 @@ final class FrameApplier {
     }
 
     /// Raise back to front, so the last raised ends up frontmost. AXRaise does not activate the app.
-    private func raise(_ ids: [WindowID], pids: [WindowID: pid_t]) {
+    private func raise(_ ids: [WindowID], pids: [WindowID: pid_t], permit: Int) {
         for id in ids {
+            guard writes.allows(permit) else { return }
             guard let pid = pids[id] else { continue }
-            withElement(pid: pid, id: id) { AXUIElementPerformAction($0, kAXRaiseAction as CFString) }
+            withElement(pid: pid, id: id) { element in
+                guard self.writes.allows(permit) else { return AXError.success }
+                return AXUIElementPerformAction(element, kAXRaiseAction as CFString)
+            }
         }
     }
 
@@ -223,17 +252,19 @@ final class FrameApplier {
 
     // Size, position, size: the first size lets a window near the screen edge move, the second
     // fixes the size if the move clamped it. Stops at an invalid element, which takes no writes.
-    private func write(_ frame: CGRect, to element: AXUIElement) -> AXError {
+    private func write(_ frame: CGRect, to element: AXUIElement, permit: Int) -> AXError {
         var size = frame.size, origin = frame.origin
         let sizeValue = AXValueCreate(.cgSize, &size)!, originValue = AXValueCreate(.cgPoint, &origin)!
         for (attribute, value) in [(kAXSizeAttribute, sizeValue), (kAXPositionAttribute, originValue), (kAXSizeAttribute, sizeValue)] {
+            guard writes.allows(permit) else { return .success }
             let error = AXUIElementSetAttributeValue(element, attribute as CFString, value)
             if error == .invalidUIElement { return error }
         }
         return .success
     }
 
-    private func move(_ origin: CGPoint, to element: AXUIElement) -> AXError {
+    private func move(_ origin: CGPoint, to element: AXUIElement, permit: Int) -> AXError {
+        guard writes.allows(permit) else { return .success }
         var origin = origin
         return AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &origin)!)
     }

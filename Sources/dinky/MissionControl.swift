@@ -2,7 +2,7 @@ import AppKit
 
 // Whether Mission Control, App Exposé or Show Desktop is showing. On macOS 27 WindowManager draws them:
 // it orders in a display-sized window at level 19 on entry and hides it on exit, which the window model
-// sees like any other window. Borders hide and hover focus stands down while it is up.
+// sees like any other window. Layout writes pause, borders hide and hover focus stands down while it is up.
 final class MissionControl {
     static let shared = MissionControl()
 

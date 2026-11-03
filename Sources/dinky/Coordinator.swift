@@ -18,7 +18,8 @@ final class Coordinator {
     let model = WindowModel()
     var enabled = true {
         didSet {
-            if !enabled { applier.cancel(); animator.cancel(); cancelDrag() }
+            applier.updateLayoutState(enabled: enabled, overview: MissionControl.shared.active)
+            if !enabled { animator.cancel(); cancelDrag() }
             if enabled != oldValue { updateBorders() }
             if enabled, !oldValue {
                 enabledSince = Date()
@@ -40,7 +41,7 @@ final class Coordinator {
     var placements: [WindowID: Placement] = [:]
     /// AX identifiers read during classification. Cached so diagnostic queries never block on AX.
     var windowIdentifiers: [WindowID: String] = [:]
-    var dirty: Set<UInt64> = []
+    var layouts = PendingLayouts()
     /// Counts overlapping full writes so an older completion cannot expose a newer pass's events.
     private var applying: [UInt64: Int] = [:]
     private var frameRecovery: [WindowID: FrameRecovery] = [:]
@@ -124,7 +125,7 @@ final class Coordinator {
         // A workspace switched to/from floating must release/acquire its existing windows too.
         for window in model.windows.values { track(window) }
         fitToDisplays()
-        dirty.formUnion(workspaces.keys)
+        layouts.dirty.formUnion(workspaces.keys)
         flush()
     }
 
@@ -144,7 +145,10 @@ final class Coordinator {
 
     private func handle(_ event: WindowEvent) {
         // Detected here, not in the border manager, so hover focus stands down even with borders off.
-        if MissionControl.shared.update(from: model) { borders?.missionControlChanged() }
+        if MissionControl.shared.update(from: model) {
+            overviewChanged()
+            borders?.missionControlChanged()
+        }
         borders?.handle(event)
         if let window = event.window {
             event.change == .removed ? forget(window.id) : track(window)
@@ -165,15 +169,30 @@ final class Coordinator {
         flush()
     }
 
+    /// Keep tracking trees, but let macOS alone present their windows. Entry invalidates queued writes and
+    /// raises too; exit writes the final dirty trees once, without replaying their interrupted animations.
+    private func overviewChanged() {
+        applier.updateLayoutState(enabled: enabled, overview: MissionControl.shared.active)
+        if MissionControl.shared.active {
+            animator.cancel()
+            cancelDrag()
+            layouts.pause(Set(workspaces.keys))
+        } else {
+            syncFocus()
+            snap.formUnion(layouts.resume())
+        }
+    }
+
     /// Apps can move themselves after the write and its retry have finished. Correct that event, not a timer.
     private func recoverFrame(of id: WindowID) {
-        guard enabled, let placement = placements[id], !placement.floating, let key = placement.space,
+        guard enabled, !MissionControl.shared.active,
+              let placement = placements[id], !placement.floating, let key = placement.space,
               isVisible(key), let tile = workspaces[key]?.layout().frames[id] else { return }
         let eligible = dragging == nil && !CGEventSource.buttonState(.combinedSessionState, button: .left)
             && !animator.isAnimating(id) && applying[key, default: 0] == 0
         let resting = animator.isResting(id, at: dinky_window_info(id).frame, for: tile)
         if frameRecovery[id, default: FrameRecovery()].shouldReapply(tile: tile, resting: resting, eligible: eligible) {
-            dirty.insert(key)
+            layouts.dirty.insert(key)
             snap.insert(key)
         }
     }
@@ -188,7 +207,7 @@ final class Coordinator {
         fitToDisplays()
         workspaces = workspaces.filter { displays.display(containingSpace: $0.key) != nil || !$0.value.windows.isEmpty }
         syncFocus()
-        dirty.formUnion(workspaces.keys)
+        layouts.dirty.formUnion(workspaces.keys)
         flush()
     }
 
@@ -229,8 +248,8 @@ final class Coordinator {
             let resting = workspace.layout().frames.allSatisfy { id, tile in
                 animator.isResting(id, at: dinky_window_info(id).frame, for: tile)
             }
-            if dirty.contains(key) || !resting {
-                dirty.insert(key)
+            if layouts.dirty.contains(key) || !resting {
+                layouts.dirty.insert(key)
                 snap.insert(key)
             }
         }
@@ -241,7 +260,7 @@ final class Coordinator {
     /// Forgets every minimum size learned and re-applies every tree, so windows are asked for their tiles again.
     func clearMinimumSizes() {
         applier.forgetMinimums()
-        dirty.formUnion(workspaces.keys)
+        layouts.dirty.formUnion(workspaces.keys)
         flush()
     }
 
@@ -427,7 +446,7 @@ final class Coordinator {
         let before = workspace.layout()
         let result = change(&workspace)
         workspaces[key] = workspace
-        if workspace.layout() != before { dirty.insert(key) }
+        if workspace.layout() != before { layouts.dirty.insert(key) }
         return result
     }
 
@@ -435,11 +454,10 @@ final class Coordinator {
 
     func flush() {
         guard !holding else { return }
-        let keys = dirty
         // A tree on a hidden Space waits for it to be shown; `spacesShown` writes it then.
-        dirty = keys.filter { !isVisible($0) && workspaces[$0] != nil }
+        let keys = layouts.take(visible: Set(displays.displays.map(\.currentSpaceID)), existing: Set(workspaces.keys))
         guard enabled else { return }
-        for key in keys where isVisible(key) { apply(key) }
+        for key in keys { apply(key) }
     }
 
     /// Whether the Space is a display's current one.
@@ -462,14 +480,14 @@ final class Coordinator {
         let front = workspace.focused == dragging ? nil : workspace.focused
         let pids = Dictionary(uniqueKeysWithValues: layout.order.compactMap { id in model.windows[id].map { (id, $0.pid) } })
         let write = { [weak self] in
-            guard let self else { return }
+            guard let self, self.enabled, let permit = self.applier.permit else { return }
             applying[key, default: 0] += 1
             applier.apply(layout, pids: pids, front: front) { [weak self] results in
                 DispatchQueue.main.async {
                     guard let self else { return }
                     let remaining = self.applying[key, default: 0] - 1
                     self.applying[key] = remaining > 0 ? remaining : nil
-                    guard self.enabled else { return }
+                    guard self.enabled, self.applier.allows(permit) else { return }
                     for result in results {
                         if let got = result.got, self.animator.isResting(result.job.id, at: got, for: result.job.frame) {
                             self.frameRecovery[result.job.id] = nil
