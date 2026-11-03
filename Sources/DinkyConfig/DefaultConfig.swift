@@ -77,7 +77,7 @@ extension Config {
 
     [swipe]
     enabled = false                 # the Spaces swipe focuses the next window of a tiled workspace first
-    space-switch = 'instant'        # past the last window: instant (dinky's fast switch) | native (macOS's own)
+    space-switch = 'instant'        # instant (focus, then switch past the edge) | native (macOS also acts); native on macOS 27+
     vertical = false                # up and down too: windows above and below, then Mission Control or App Exposé
 
     [animations]

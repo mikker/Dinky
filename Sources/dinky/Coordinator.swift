@@ -36,7 +36,7 @@ final class Coordinator {
     private lazy var animator = Animator(applier: applier)
     private var borders: BorderManager?
     func isBorderWindow(_ id: WindowID) -> Bool { borders?.isBorder(id) ?? false }
-    private(set) var workspaces: [UInt64: Workspace] = [:]
+    var workspaces: [UInt64: Workspace] = [:]
     var placements: [WindowID: Placement] = [:]
     /// AX identifiers read during classification. Cached so diagnostic queries never block on AX.
     var windowIdentifiers: [WindowID: String] = [:]

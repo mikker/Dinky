@@ -73,7 +73,7 @@ let package = Package(
         ),
         .testTarget(
             name: "DinkyAppTests",
-            dependencies: ["dinky"],
+            dependencies: ["dinky", "DinkyConfig", "DinkyPrivate"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

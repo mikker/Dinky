@@ -30,16 +30,12 @@ static const int kPhaseBegan = 1;
 static const int kPhaseChanged = 2;
 static const int kPhaseEnded = 4;
 
-// Dock swipe events dinky posted that the swipe tap has not seen yet, and when the last was posted. A tap sees
-// dinky's own swipes as it sees the trackpad's; nothing that survives posting marks them, so they are counted
-// off as they come by, as iss does.
-static int own_dock_events = 0;
-static uint64_t own_dock_events_at = 0;
+// Identify each event, not the next N events: a physical swipe can interleave with a posted switch.
+static int64_t own_swipe_tag(void) { return ((int64_t)0x44494E4B << 32) | (uint32_t)getpid(); }
 
 static void post_dock_event(CGEventRef event)
 {
-    own_dock_events++;
-    own_dock_events_at = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+    CGEventSetIntegerValueField(event, kCGEventSourceUserData, own_swipe_tag());
     CGEventPost(kCGSessionEventTap, event);
 }
 
@@ -385,6 +381,8 @@ bool dinky_read_dock_swipe(CGEventRef event, DinkySwipePhase *phase, bool *verti
     if (motion != kGestureMotionHorizontal && motion != kGestureMotionVertical) return false;
     *vertical = motion == kGestureMotionVertical;
     *phase = (DinkySwipePhase)CGEventGetIntegerValueField(event, kGesturePhase);
+    if (*phase != DinkySwipePhaseBegan && *phase != DinkySwipePhaseChanged
+        && *phase != DinkySwipePhaseEnded && *phase != DinkySwipePhaseCancelled) return false;
     // The progress while the fingers move; a quick flick may only report a velocity as it ends.
     double value = CGEventGetDoubleValueField(event, kGestureSwipeProgress);
     if (value == 0.0) value = CGEventGetDoubleValueField(event, *vertical ? kGestureSwipeVelocityY : kGestureSwipeVelocityX);
@@ -409,30 +407,15 @@ bool dinky_is_gesture_event(CGEventRef event)
     return CGEventGetIntegerValueField(event, kEventTypeField) == kEventGesture;
 }
 
-void dinky_neutralize_dock_swipe(CGEventRef event)
+bool dinky_can_suppress_dock_swipe(void)
 {
-    CGEventSetDoubleValueField(event, kGestureSwipeProgress, 0);
-    CGEventSetDoubleValueField(event, kGestureSwipeVelocityX, 0);
-    CGEventSetDoubleValueField(event, kGestureSwipeVelocityY, 0);
+    // The attached IOHID payload on 27+ is not changed by ordinary CGEvent setters. Until suppression is
+    // validated with a physical trackpad, observe these swipes without modifying or dropping any events.
+    return !requires_augmentation();
 }
 
-bool dinky_dock_swipe_needs_payload(void)
+bool dinky_is_own_dock_swipe(CGEventRef event)
 {
-    return requires_augmentation();
-}
-
-bool dinky_take_own_dock_swipe(void)
-{
-    // Ones the tap never saw, because it was off or macOS dropped them, would pass real swipes for good.
-    if (own_dock_events > 0 && clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - own_dock_events_at > 1000000000ULL) {
-        own_dock_events = 0;
-    }
-    if (own_dock_events == 0) return false;
-    own_dock_events--;
-    return true;
-}
-
-void dinky_forget_own_dock_swipes(void)
-{
-    own_dock_events = 0;
+    return CGEventGetIntegerValueField(event, kCGEventSourceUserData) == own_swipe_tag()
+        || CGEventGetIntegerValueField(event, kCGEventSourceUnixProcessID) == getpid();
 }

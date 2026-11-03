@@ -326,18 +326,20 @@ fullscreen-width = 0.55
 
 ## `[swipe]`
 
-The trackpad swipe that switches Spaces moves between a tiled workspace's
-windows first, as niri's does along its columns. Swipe toward the next window,
-a column of a scrolling workspace, an accordion child or a tile, and dinky
-focuses it; swipe past the last one and the Space switches, as it always has.
+With `enabled = true`, the trackpad swipe that switches Spaces also moves focus
+between a tiled workspace's windows: scrolling columns, accordion children or tiles.
+In `'instant'` mode on macOS before 27, dinky keeps the swipe from the Dock and
+switches Space only past the last window. In `'native'` mode, macOS receives the
+whole swipe: a short swipe can move focus, and a full, quick swipe can both move
+focus and switch Space, even before the last window.
 The swipe is whichever macOS uses to switch Spaces: three fingers, or four if
 **System Settings › Trackpad › More Gestures › Swipe between full-screen
 applications** says so. The swipe follows the content, as the Spaces do: move
 your fingers left to go to the window on the right.
 
-With `vertical = true` the swipe up and down moves focus between the windows
-above and below the same way, and only past the last one opens Mission
-Control or App Exposé.
+With `vertical = true`, swipes up and down also move focus between windows
+above and below. These always use native mode: a full, quick swipe can both
+move focus and open Mission Control or App Exposé, not just past the last window.
 
 Up and down always go the `'native'` way, so macOS sees those swipes begin
 and end too, and a quick swipe down can open App Exposé even when dinky has
@@ -346,7 +348,9 @@ Settings › Trackpad › More Gestures › App Exposé**. Mission Control keeps
 swipe up.
 
 dinky reads the swipe from the Dock's private events, as it already switches
-Spaces with them, so a macOS update can break it. Each swipe moves one window.
+Spaces with them, so a macOS update can break it. This feature is off by default.
+On macOS 27 and later, `'instant'` falls back to `'native'`: dinky does not suppress
+swipes with attached IOHID payloads. Each swipe moves at most one window.
 On a workspace with one window or none tiled, or while dinky is disabled, the
 swipe is macOS's own.
 
@@ -355,7 +359,7 @@ swipe is macOS's own.
 | Key | Default | |
 |---|---|---|
 | `enabled` | `false` | Sideways swipes focus the windows of tiled workspaces. |
-| `space-switch` | `'instant'` | How a swipe past the last window switches Space. `'instant'`: dinky keeps the swipe from macOS and switches with its own fast switch once your fingers lift. `'native'`: macOS sees the swipe begin and end, so a short swipe moves focus and a full, quick one switches Space whichever window has focus. |
+| `space-switch` | `'instant'` | Before macOS 27, `'instant'` keeps the swipe from macOS and switches Space past the last window once your fingers lift. `'native'` passes the whole swipe to macOS, so a full, quick swipe can both focus and switch Space. On macOS 27+, both settings use native mode. |
 | `vertical` | `false` | Swipes up and down focus the windows below and above too, before Mission Control and App Exposé. They always go the `'native'` way. |
 
 </div>
@@ -611,7 +615,7 @@ accordion-edges = true          # resting on a peeking accordion edge focuses th
 
 [swipe]
 enabled = false                 # the Spaces swipe focuses the next window of a tiled workspace first
-space-switch = 'instant'        # past the last window: instant (dinky's fast switch) | native (macOS's own)
+space-switch = 'instant'        # instant (focus, then switch past the edge) | native (macOS also acts); native on macOS 27+
 vertical = false                # up and down too: windows above and below, then Mission Control or App Exposé
 
 [animations]

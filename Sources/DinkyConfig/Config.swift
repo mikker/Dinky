@@ -421,8 +421,9 @@ public struct Swipe: Equatable {
     }
 }
 
-/// `instant`: dinky keeps the swipe from macOS and switches with its own fast swipe once the fingers lift.
-/// `native`: macOS sees the swipe begin and end, so a short swipe moves focus and a full one switches Space.
+/// `instant`: before macOS 27, dinky owns the swipe and switches past the edge once the fingers lift.
+/// `native`: macOS receives the whole swipe, so a full swipe can both move focus and switch Space.
+/// On macOS 27+, instant falls back to native; attached IOHID payload suppression is not validated.
 public enum SpaceSwitch: String, CaseIterable {
     case instant, native
 }

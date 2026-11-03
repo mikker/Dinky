@@ -13,6 +13,14 @@ extension Coordinator {
         workspaces[display.currentSpaceID]
     }
 
+    /// A queued swipe must still refer to the same focused tile in the same Space, not follow a moved window.
+    func swipeTarget(on space: UInt64, from id: WindowID, direction: Direction) -> WindowID? {
+        guard enabled, placements[id]?.space == space, let workspace = workspaces[space],
+              workspace.focused == id, let target = workspace.swipeTarget(direction),
+              placements[target]?.space == space else { return nil }
+        return target
+    }
+
     /// The container holding a tiled window.
     func container(of id: WindowID) -> Container? {
         placements[id]?.space.flatMap { workspaces[$0]?.container(of: id) }

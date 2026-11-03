@@ -34,10 +34,11 @@ final class AppState {
     let recovery = Recovery()
     private let hooks = Hooks()
     private let hoverFocus = HoverFocus()
-    private let swipeFocus = SwipeFocus()
+    private let swipeFocus: SwipeFocus
     private var watcher: ConfigWatcher?
 
-    private init() {
+    init(swipeFocus: SwipeFocus = SwipeFocus()) {
+        self.swipeFocus = swipeFocus
         hotkeys.load(modes: config.modes, sides: config.modifiers)
     }
 
@@ -105,13 +106,15 @@ final class AppState {
         case .success(let config):
             self.config = config
             configError = nil
+            // Invalidate before mode hooks or layout/Space updates can pump the run loop.
+            // At launch, the swipe tap starts only after the coordinator knows its windows.
+            if coordinator != nil { swipeFocus.update(config: config.swipe) }
             hotkeys.load(modes: config.modes, sides: config.modifiers)
             // At launch the app arranges the workspaces itself, once the coordinator has started.
             if let coordinator {
                 coordinator.update(config: config)
                 numbers.arrange()
                 hoverFocus.update(config: config.focusFollowsMouse)
-                swipeFocus.update(config: config.swipe)
             }
             applyStartAtLogin(config.startAtLogin)
         case .failure(let error):
@@ -125,6 +128,8 @@ final class AppState {
     /// Hands `enabled` to the parts that keep their own copy. The activation follower and hover focus read it
     /// when they decide.
     private func propagateEnabled() {
+        // Invalidate swipe actions before coordinator enable/restore paths can reenter the run loop.
+        swipeFocus.setEnabled(enabled)
         hotkeys.enabled = enabled
         coordinator?.enabled = enabled
     }

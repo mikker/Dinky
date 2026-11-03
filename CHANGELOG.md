@@ -27,7 +27,7 @@
 
 ### Trackpad
 
-- New `[swipe]`: with `enabled = true`, the trackpad swipe that switches Spaces moves between a tiled workspace's windows first (scrolling columns, accordion children, tiles), as niri's does along its columns, and switches Space only past the last window. `space-switch = 'instant'` (the default) switches with dinky's fast switch once your fingers lift; with `'native'` macOS sees the swipe too, so a short swipe moves focus and a full, quick one switches Space. `vertical = true` does the same up and down, before Mission Control and App Exposé.
+- New opt-in `[swipe]`: trackpad swipes move focus between tiled windows (scrolling columns, accordion children or tiles). Before macOS 27, `space-switch = 'instant'` switches Space only past the last window, once your fingers lift. Native mode passes the entire swipe to macOS: a full, quick swipe can both move focus and switch Space. `vertical = true` uses native mode up and down, so Mission Control or App Exposé can open even before the last window. On macOS 27+, instant mode falls back to native mode; IOHID swipe suppression is not enabled.
 
 ## 0.23
 

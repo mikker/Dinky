@@ -25,11 +25,7 @@ CGEventMask dinky_dock_swipe_event_mask(void);
 bool dinky_read_dock_swipe(CGEventRef event, DinkySwipePhase *phase, bool *vertical, int *direction);
 /// Whether the event is one of the gesture events that come with a Dock swipe.
 bool dinky_is_gesture_event(CGEventRef event);
-/// Clears a Dock swipe event's progress and velocity, so passing it on goes nowhere.
-void dinky_neutralize_dock_swipe(CGEventRef event);
-/// Whether the Dock passes a swipe event on to its gesture state only with the macOS 27 payload attached.
-bool dinky_dock_swipe_needs_payload(void);
-/// Whether a Dock swipe event is one dinky posted to switch Spaces, which a tap must let through. Counts it off.
-bool dinky_take_own_dock_swipe(void);
-/// Forgets the Dock swipe events dinky posted that no tap has seen yet.
-void dinky_forget_own_dock_swipes(void);
+/// Suppression is disabled on macOS 27+, whose attached IOHID payload cannot safely be neutralized here.
+bool dinky_can_suppress_dock_swipe(void);
+/// Whether this particular event originated in dinky. Never consumes unrelated physical events.
+bool dinky_is_own_dock_swipe(CGEventRef event);
