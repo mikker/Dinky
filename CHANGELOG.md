@@ -12,10 +12,11 @@
 ### Fixes
 
 - A command longer than 4 KiB that spans several lines, such as a multi-line `exec-and-forget` script, reaches the app whole. Before, the app stopped reading at the first 4 KiB chunk holding a newline, ran the cut-off script and still answered `ok`.
+- Incomplete socket requests that time out, exceed 1 MiB or contain invalid UTF-8 are rejected instead of executing a partial command. Raw clients must close their writing half to finish a request.
 
 ### Other
 
-- The socket's read and write helpers moved into a `DinkySocket` module with unit tests.
+- The socket transport moved into a `DinkySocket` module with unit and private-socket server/client integration tests.
 
 ## 0.23
 

@@ -4,15 +4,6 @@ import DinkyConfig
 import DinkyLayout
 import DinkyPrivate
 
-/// What a command answers: a short line for the CLI, and whether it worked.
-struct Reply {
-    var ok: Bool
-    var text: String
-
-    static func ok(_ text: String) -> Reply { Reply(ok: true, text: text) }
-    static func error(_ text: String) -> Reply { Reply(ok: false, text: text) }
-}
-
 // Runs commands from bindings, the CLI and the menu against what exists today. Main thread only.
 // Workspaces are numbered across displays; `prev` and `next` step through the focused display's.
 enum Dispatcher {
@@ -305,4 +296,3 @@ enum Dispatcher {
         return nil
     }
 }
-

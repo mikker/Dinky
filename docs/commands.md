@@ -69,6 +69,12 @@ answered with `ok` or `error` and the reply.
 printf 'workspace 2\n' | nc -U "$TMPDIR/dinky.sock"
 ```
 
+Requests are UTF-8, up to 1 MiB, and may contain newlines. After writing the
+request, close the connection's writing half (`shutdown(SHUT_WR)`) and read the
+reply until EOF. The CLI and macOS `nc` do this automatically. A newline alone
+does not finish a request. The app rejects an incomplete request after two seconds
+without incoming data, or an oversized or invalid UTF-8 request, without running it.
+
 ## Recovery
 
 dinky journals each window's original frame and Space before tiling it. `enable
