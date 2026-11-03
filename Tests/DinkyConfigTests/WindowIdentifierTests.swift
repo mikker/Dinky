@@ -80,11 +80,9 @@ struct WindowIdentifierTests {
             do {
                 _ = try Config.parse("[[rules]]\n\(key) = '['\nrun = 'layout floating'")
                 Issue.record("Expected an invalid regex error")
-            } catch let error as ConfigError {
+            } catch {
                 #expect(error.path == "rules[0].\(key)")
                 #expect(error.message.contains("not a valid regex"))
-            } catch {
-                Issue.record("Unexpected error: \(error)")
             }
         }
     }
