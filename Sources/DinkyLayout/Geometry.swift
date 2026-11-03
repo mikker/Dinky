@@ -82,9 +82,11 @@ extension Container {
                 virtual: Bool = false, path: [Int] = [], into result: inout Layout) {
         result.containerRects[path] = rect
         let tiled = mode == .tiles || virtual, axis = axis(in: rect), gap = gaps.inner(axis)
+        let extents = children.map { $0.minimumExtent(axis, gap: gap, padding: 0, minimums) }
         let rects = tiled
-            ? tileRects(in: rect, gap: gap, minimums: children.map { $0.minimumExtent(axis, gap: gap, padding: padding, minimums) })
-            : accordionRects(in: rect, padding: padding)
+            ? tileRects(in: rect, gap: gap, minimums: extents,
+                        preferredMinimums: children.map { $0.minimumExtent(axis, gap: gap, padding: padding, minimums) })
+            : accordionRects(in: rect, padding: padding, minimums: extents)
         for i in stackingOrder {
             switch children[i] {
             case .window(let id):
@@ -103,13 +105,16 @@ extension Container {
     }
 
     /// Split `rect` along the orientation by ratios, `gap` between children, edges rounded to whole points.
-    /// Children below their `minimums` extent are grown to it, taken from the others, when everyone fits.
-    func tileRects(in rect: CGRect, gap: CGFloat, minimums: [CGFloat] = []) -> [CGRect] {
+    /// Prefer full accordion peeks when they fit; otherwise grow children only to their hard content minima.
+    /// If even those cannot fit, keep the configured ratios, as for any impossible set of window minima.
+    func tileRects(in rect: CGRect, gap: CGFloat, minimums: [CGFloat] = [], preferredMinimums: [CGFloat] = []) -> [CGRect] {
         let horizontal = axis(in: rect) == .horizontal
         let origin = horizontal ? rect.minX : rect.minY
         let extent = horizontal ? rect.width : rect.height
         let available = extent - gap * CGFloat(max(children.count - 1, 0))
-        let sizes = fit(ratios.map { available * CGFloat($0) }, minimums: minimums, total: available)
+        let preferredFits = preferredMinimums.count == children.count && preferredMinimums.reduce(0, +) <= available
+        let sizes = fit(ratios.map { available * CGFloat($0) },
+                        minimums: preferredFits ? preferredMinimums : minimums, total: available)
         var start = origin
         return sizes.map { size in
             let end = start + size
@@ -122,9 +127,15 @@ extension Container {
     }
 
     /// Accordion rects: each child gets `rect` shrunk along the axis so neighbours of the active child peek out.
+    /// Peeks share the available extent with at least one content slot. Recorded minima reserve more content;
+    /// if even the content cannot fit, drop peeks rather than overflowing the allocated rect.
     /// Adapted from AeroSpace's layoutAccordion (MIT, github.com/nikitabobko/AeroSpace).
-    func accordionRects(in rect: CGRect, padding p: CGFloat) -> [CGRect] {
+    func accordionRects(in rect: CGRect, padding: CGFloat, minimums: [CGFloat] = []) -> [CGRect] {
         let last = children.count - 1, active = activeIndex, horizontal = axis(in: rect) == .horizontal
+        let extent = horizontal ? rect.width : rect.height
+        let peeks = CGFloat(min(max(last, 0), 2))
+        let content = max(extent / (peeks + 1), minimums.max() ?? 0)
+        let p = peeks > 0 ? min(padding, max(0, (extent - content) / peeks)) : 0
         return children.indices.map { i in
             let (lead, trail): (CGFloat, CGFloat) = switch i {
             case 0 where last == 0: (0, 0)
@@ -160,6 +171,7 @@ func fit(_ sizes: [CGFloat], minimums: [CGFloat], total: CGFloat) -> [CGFloat] {
 
 extension Node {
     /// The smallest extent along `axis` this subtree can take without a window going below its minimum.
+    /// With configured `padding`, includes preferred accordion peeks; pass zero for the hard content budget.
     /// An `auto` container counts as running across `axis`: a tile's longer side is usually across its parent's axis.
     func minimumExtent(_ axis: Orientation, gap: CGFloat, padding: CGFloat, _ minimums: [WindowID: CGSize]) -> CGFloat {
         switch self {

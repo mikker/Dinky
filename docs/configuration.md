@@ -180,8 +180,9 @@ when the stack empties, the master fills the display again.
 With `side = 'center'`, the second stacked window moves the master to the
 middle of the display and opens a stack on its left. Later windows join the
 shorter stack, the right one on a tie, so they alternate right and left; when
-one closes, the bottom of the longer stack moves over to keep them even. With
-one window stacked, the master takes the left, as Hyprland's does. `layout`
+one closes, the bottom of the longer stack moves over to keep them even, with
+any extra window on the right. Flattening or switching sides and back preserves
+this arrangement. With one window stacked, the master takes the left, as Hyprland's does. `layout`
 changes both stacks, `swap-with-master` trades the master with the top of the
 right one, and `resize width` on the master widens it evenly into both.
 
@@ -233,7 +234,7 @@ its own.
 
 | Key | Default | |
 |---|---|---|
-| `padding` | `30` | Points the neighbours peek out by. |
+| `padding` | `30` | Maximum points the neighbours peek out by; shrinks to leave window content in narrow containers and respect recorded window minima. |
 | `orientation` | `'auto'` | On switching to accordion, `'auto'` runs along the container's longer side; `'keep'` keeps its orientation. An orientation set with `layout` is always kept. |
 
 </div>

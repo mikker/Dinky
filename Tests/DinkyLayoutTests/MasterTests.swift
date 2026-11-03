@@ -463,6 +463,139 @@ private extension Workspace {
 }
 
 struct MasterCenterTests {
+    @Test(arguments: [80, 81, 100, 200, 201])
+    func `Parent distinguishes optional accordion peeks from feasible content minima`(masterMinimum: Int) {
+        var ws = Workspace(bounds: rect(0, 0, 1000, 600), algorithm: .master)
+        ws.masterSize = 0.9
+        ws.setMasterSide(.center)
+        for id: WindowID in 1...7 { ws.insert(id) }
+        ws.setLayout(.accordion, .horizontal)
+        ws.focus(4)
+        ws.minimumSizes = [1: CGSize(width: masterMinimum, height: 0),
+                           4: CGSize(width: 400, height: 0), 5: CGSize(width: 400, height: 0)]
+        let layout = ws.layout()
+        for frame in layout.frames.values {
+            #expect(ws.bounds.contains(frame))
+            #expect(frame.width > 0)
+        }
+        if masterMinimum <= 200 {
+            #expect(layout.frames[1]!.width >= CGFloat(masterMinimum))
+            #expect(layout.frames[4]!.width >= 400)
+            #expect(layout.frames[5]!.width >= 400)
+            if masterMinimum == 80 {
+                #expect(layout.containerRects[[0]]!.width == 460, "keep full peeks when preferred minima fit")
+                #expect(layout.containerRects[[2]]!.width == 460)
+            }
+        } else {
+            #expect(layout.frames[1]!.width == 900, "truly impossible content keeps ratio fallback")
+            #expect(layout.frames[4]!.width == 50)
+            #expect(layout.frames[5]!.width == 50)
+        }
+    }
+
+    @Test func `Narrow horizontal accordions retain content at the largest master share`() {
+        var ws = Workspace(bounds: rect(0, 0, 1000, 600), algorithm: .master)
+        ws.masterSize = 0.9
+        ws.setMasterSide(.center)
+        for id: WindowID in 1...7 { ws.insert(id) }
+        ws.setLayout(.accordion, .horizontal)
+        ws.focus(4)
+        let layout = ws.layout()
+        #expect(layout.order.first == 4)
+        for id: WindowID in 1...7 {
+            #expect(layout.frames[id]!.width > 0)
+            #expect(layout.frames[id]!.height == 600)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func `Horizontal accordion minima retain content even when the row cannot fit`(impossible: Bool) {
+        var ws = master(7, .center)
+        ws.masterSize = 0.9
+        ws.balanceSizes()
+        ws.setLayout(.accordion, .horizontal)
+        ws.focus(4)
+        ws.minimumSizes = [4: CGSize(width: 400, height: 0), 5: CGSize(width: 400, height: 0)]
+        if impossible { ws.minimumSizes[1] = CGSize(width: 900, height: 0) }
+        let layout = ws.layout()
+        for id: WindowID in 1...7 {
+            #expect(layout.frames[id]!.width > 0)
+            #expect(ws.bounds.contains(layout.frames[id]!))
+        }
+        if impossible {
+            #expect(layout.frames[1]!.width == 900, "impossible row minima leave the configured tile ratios intact")
+            #expect(layout.frames[4]!.width == 50, "peeks give way to content, not overflowing minimum targets")
+            #expect(layout.frames[5]!.width == 50)
+        } else {
+            #expect(layout.frames[4]!.width >= 400)
+            #expect(layout.frames[5]!.width >= 400)
+        }
+    }
+
+    @Test(arguments: 3...9)
+    func `Every pair of removals keeps rebuild order and surviving focus`(count: Int) {
+        for first in 1...count {
+            for second in 1...count where second != first {
+                var ws = master(count, .center)
+                ws.setLayout(.accordion, .vertical)
+                ws.remove(WindowID(first))
+                ws.remove(WindowID(second))
+                if let focused = ws.focused {
+                    #expect(ws.root.mostRecentWindow == focused)
+                }
+                let before = ws.windows
+                ws.flatten()
+                #expect(ws.windows == before)
+                ws.setMasterSide(.right)
+                ws.setMasterSide(.center)
+                #expect(ws.windows == before)
+            }
+        }
+    }
+
+    @Test func `Removing from the right keeps a canonical shape through rebuilds`() {
+        var ws = master(5, .center)
+        ws.remove(2)
+        #expect(ws.windows == [3, 1, 4, 5], "the right stack owns the odd extra window")
+        let before = ws.windows
+        let geometry = frames(ws)
+        ws.flatten()
+        #expect(ws.windows == before)
+        #expect(frames(ws) == geometry)
+        for side: MasterSide in [.left, .right] {
+            ws.setMasterSide(side)
+            ws.setMasterSide(.center)
+            #expect(ws.windows == before)
+            #expect(frames(ws) == geometry)
+        }
+    }
+
+    @Test func `Redistribution restores the focused accordion path`() {
+        var ws = master(7, .center)
+        ws.setLayout(.accordion, .vertical)
+        ws.focus(7)
+        ws.remove(2)
+        ws.remove(4)
+        #expect(ws.focused == 7)
+        #expect(ws.windows == [3, 5, 1, 6, 7])
+        #expect(ws.container(of: 7)?.mostRecentWindow == 7)
+        #expect(ws.root.mostRecentWindow == 7)
+        #expect(ws.layout().order.firstIndex(of: 7)! < ws.layout().order.firstIndex(of: 6)!)
+        let visible = frames(ws)[7]!
+        #expect(visible.height > 500, "the focused window fills the accordion apart from the peek")
+    }
+
+    @Test func `Creating a replacement stack restores the focused accordion path`() {
+        var ws = master(4, .center)
+        ws.setLayout(.accordion, .vertical)
+        ws.focus(4)
+        ws.remove(3)
+        #expect(ws.windows == [4, 1, 2])
+        #expect(ws.focused == 4)
+        #expect(ws.root.mostRecentWindow == 4)
+        #expect(frames(ws)[4]?.height == 600)
+    }
+
     @Test func `With one window stacked the centred master takes the left`() {
         let f = frames(master(2, .center))
         #expect(f[1] == rect(0, 0, 600, 600))

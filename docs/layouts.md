@@ -93,7 +93,8 @@ master's share.
 
 On a wide display, `side = 'center'` puts the master in the middle once two
 windows are stacked, and new windows alternate between a stack on its right and
-one on its left.
+one on its left. Closing windows rebalances the stacks, keeping any extra window
+on the right so flattening or switching sides and back keeps their arrangement.
 
 <figure>
 {% include figures/master-center.svg %}

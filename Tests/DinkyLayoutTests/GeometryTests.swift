@@ -3,6 +3,32 @@ import Testing
 @testable import DinkyLayout
 
 struct TilesTests {
+    @Test(arguments: [ContainerOrientation.horizontal, .vertical], [0, 10])
+    func `Tiled parents relax accordion peeks before feasible content minima`(orientation: ContainerOrientation, gap: Int) {
+        let first = Container(orientation, .accordion, [.window(1), .window(2), .window(3)])
+        let second = Container(orientation, .accordion, [.window(4), .window(5), .window(6)])
+        var parent = Container(orientation, .tiles, [.container(first), .window(7), .container(second)])
+        parent.setRatios([0.05, 0.9, 0.05])
+        var layout = Layout()
+        parent.layout(in: rect(10, 20, 1000, 1000), gaps: Gaps(all: CGFloat(gap)), padding: 30,
+                      minimums: [2: CGSize(width: 400, height: 400), 5: CGSize(width: 400, height: 400),
+                                 7: CGSize(width: 100, height: 100)], into: &layout)
+        for id: WindowID in [2, 5, 7] {
+            let frame = layout.frames[id]!
+            #expect(rect(10, 20, 1000, 1000).contains(frame))
+            let extent = orientation == .horizontal ? frame.width : frame.height
+            #expect(extent >= (id == 7 ? 100 : 400))
+        }
+        let a = layout.containerRects[[0]]!, b = layout.containerRects[[2]]!
+        if orientation == .horizontal {
+            #expect(layout.frames[7]!.minX - a.maxX == CGFloat(gap))
+            #expect(b.minX - layout.frames[7]!.maxX == CGFloat(gap))
+        } else {
+            #expect(layout.frames[7]!.minY - a.maxY == CGFloat(gap))
+            #expect(b.minY - layout.frames[7]!.maxY == CGFloat(gap))
+        }
+    }
+
     @Test(arguments: zip(1...5, [
         [1: rect(0, 0, 1000, 600)],
         [1: rect(0, 0, 500, 600), 2: rect(500, 0, 500, 600)],
@@ -68,6 +94,24 @@ struct TilesTests {
 }
 
 struct AccordionTests {
+    @Test(arguments: [ContainerOrientation.horizontal, .vertical], [1, 2, 3, 6])
+    func `Peeks leave content along either axis with fitting or impossible minima`(axis: ContainerOrientation, count: Int) {
+        var container = Container(axis, .accordion, (1...count).map { .window(WindowID($0)) })
+        let bounds = rect(10, 20, 12, 12)
+        for active in 0..<count {
+            container.active = active
+            for minimum: CGFloat in [0, 8, 40] {
+                let targets = container.accordionRects(in: bounds, padding: 30, minimums: Array(repeating: minimum, count: count))
+                for target in targets {
+                    #expect(bounds.contains(target))
+                    #expect(target.width > 0 && target.height > 0)
+                    let extent = axis == .horizontal ? target.width : target.height
+                    #expect(extent >= min(12, max(4, minimum)))
+                }
+            }
+        }
+    }
+
     @Test func `Single child fills rect`() {
         #expect(workspace(1, algorithm: .dwindle(.accordion)).layout().frames[1] == rect(0, 0, 1000, 600))
     }

@@ -11,8 +11,9 @@
 // Centred, for wide displays, after Hyprland's `orientation = center`: from the second stacked window on, the
 // master takes the middle and the stack splits in two, the row holding the left stack, the master and the right
 // stack. New windows join the shorter stack, the right one on a tie, so they alternate right and left; when a
-// window closes, the bottom of the longer stack moves over to keep them even. With one stacked window the master
-// takes the left, as Hyprland's `center_master_fallback` does by default.
+// window closes, the bottom of the longer stack moves over to keep them even, with the extra window on the right.
+// This keeps rebuilding in right-first order stable. With one stacked window the master takes the left, as
+// Hyprland's `center_master_fallback` does by default.
 
 /// The side of the screen the master window takes.
 public enum MasterSide: Equatable, Sendable {
@@ -125,11 +126,15 @@ extension Workspace {
             root.modify(at: [path[0]]) { $0.remove(at: path[1]) }
         }
         if masterSide == .center { evenStacks(masterShare: share) }
+        // Redistribution can move the focused window between stacks, or shift its path in the root row.
+        // A closing focused window is left to remove(_:) to replace; a survivor must stay atop its accordion.
+        if let focused { focus(focused) }
     }
 
     /// After a centred master's window closed, a stack emptied gets the bottom of the other back if it holds two
     /// or more; a lone left stack comes round to the master's right. Then the bottom of the longer stack moves over
-    /// until neither holds two more than the other. The master keeps `share` when the row changes.
+    /// until the right stack holds the same number or one more, matching insertion and rebuild order. The master
+    /// keeps `share` when the row changes.
     private mutating func evenStacks(masterShare share: Double) {
         func takeBottom(of index: Int) -> Node {
             let last = root.container(at: [index]).children.count - 1
@@ -154,7 +159,7 @@ extension Workspace {
         if root.children.count == 3 {
             while true {
                 let left = root.container(at: [0]).children.count, right = root.container(at: [2]).children.count
-                guard abs(left - right) > 1 else { break }
+                guard left > right || right > left + 1 else { break }
                 let (from, to) = left > right ? (0, 2) : (2, 0)
                 let node = takeBottom(of: from)
                 root.modify(at: [to]) { $0.insert(node, at: $0.children.count) }

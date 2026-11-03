@@ -8,6 +8,8 @@
 ### Layout
 
 - `[master] side = 'center'` centres the master for wide displays, after Hyprland's `orientation = center`. From the second stacked window on, the master takes the middle and the stack splits in two beside it: new windows alternate right and left, and the stacks stay even as windows close. With one window stacked, the master takes the left.
+- Centered stacks keep any extra window on the right after a close, so flattening or switching sides and back preserves their arrangement. A focused window moved between accordion stacks stays on top.
+- Accordion peeks shrink in narrow containers to leave usable window content, including horizontal stacks beside a wide centered master. Parent containers relax peek budgets before giving up on recorded window minima that fit without peeks.
 
 ### Configuration
 
