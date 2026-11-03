@@ -37,6 +37,14 @@ file is left alone, with the read error shown in the menu.
 
 </div>
 
+`follow-space-order` follows reordering **within each display**. Display assignments in
+`[workspace-to-display]` still win: dragging a Space onto another display does not reassign
+its workspace, and the next arrangement returns its windows to the configured display.
+Numbers are positional when following the Space order: `[workspace.2]` settings and commands
+or rules targeting workspace 2 apply to the newly numbered workspace 2, not to the Space
+that previously held that number. Enabling the option with `reload-config` also adopts
+the current order.
+
 ## `[follow-app-activation]`
 
 The table form of `follow-app-activation`, in place of the top-level line.
@@ -387,6 +395,10 @@ environment `exec-and-forget` gets.
 | `display-changed` | When a display connects or disconnects, once the displays have settled and dinky has moved the workspaces to them, about a second later. Sets `DINKY_DISPLAYS` and `DINKY_PREV_DISPLAYS`, how many displays there are now and were before. |
 
 </div>
+
+During a dinky switch, `workspace-changed` reports the destination or where the switch
+gives up, not intermediate Spaces. A reorder during the switch is included in that
+final notification.
 
 ## `[[rules]]`
 

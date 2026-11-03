@@ -61,7 +61,7 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AppState.shared.startCoordinator()
         if let windows = AppState.shared.coordinator?.model { noteGoneWindows(in: windows) }
         AppState.shared.numbers.start()
-        AppState.shared.numbers.observe { [weak self] in self?.refresh() }
+        AppState.shared.numbers.observe { [weak self] _ in self?.refresh() }
         AppState.shared.displays.observe { [weak self] _ in self?.refresh() }
         // Nothing publishes the enabled state, the config error or other tilers starting and quitting.
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.refresh() }

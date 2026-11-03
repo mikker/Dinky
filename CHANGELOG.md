@@ -13,7 +13,7 @@
 
 ### Configuration
 
-- New `follow-space-order` renumbers workspaces when you reorder Spaces in Mission Control, so on each display the leftmost Space is its lowest-numbered workspace. Windows stay where they are, and the menu bar and `workspace-changed` hooks update at once. Off by default: a workspace keeps its number, and the next arrangement moves its windows back to that number's place.
+- New `follow-space-order` renumbers workspaces when you reorder Spaces within a display in Mission Control. Windows stay where they are, and the menu bar and `workspace-changed` hooks update, including when enabling the option with a config reload. Workspace settings follow the new numbers; display assignments still win when a Space moves between displays. Off by default: a workspace keeps its number, and the next arrangement moves its windows back to that number's place.
 - Window rules can match `window-identifier` or reject `exclude-window-identifier` using case-insensitive regexes against Accessibility's `AXIdentifier`. Exclusions skip the whole rule, including workspace moves. Inspect cached identifiers with `%{window-identifier}` in `list-windows` or `window-identifier` in `debug-state` (#59, thanks @albertomalossi; fixes #56).
 
 ### Fixes

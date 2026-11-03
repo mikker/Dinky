@@ -12,23 +12,13 @@ import DinkyPrivate
 // is workspace 1's. So the workspace of every window is noted while the displays are settled, and once the
 // Spaces are arranged after a display change, windows found off their workspace go back to it, unless dinky
 // was disabled at the time (`DisplacedWindows`). Main thread only.
-final class WorkspaceNumbers {
-    /// Workspace number to Space.
-    private(set) var binding: [Int: UInt64] = [:]
-    private var observers: [() -> Void] = []
+final class WorkspaceNumbers: WorkspaceNumbering {
     /// Called at the end of every arrangement, once the coordinator has re-read the windows.
     var onArranged: (() -> Void)?
-    /// Called when `follow-space-order` renumbers, before observers hear of it, with the UUIDs of the displays
-    /// whose workspaces changed number.
-    var onRenumbered: ((Set<String>) -> Void)?
     private var pending: DispatchWorkItem?
     private var arranging = false
     /// Spaces this removed, whose `spaceDestroyed` events are not news.
     private var removed: Set<UInt64> = []
-    /// The workspace each window was on while the displays were settled. See `noteHomes()`.
-    private var homes: [UInt32: Int] = [:]
-    /// The last note of homes, kept only if the displays are still the same at the next one.
-    private var pendingHomes: [UInt32: Int]?
     /// The displays as the last display change left them.
     private var knownDisplays: Set<String> = []
     /// Whether windows a display change moved go back after the next arrangement, and only then: returning
@@ -45,9 +35,6 @@ final class WorkspaceNumbers {
     func current(on display: Display) -> Int? { number(of: display.currentSpaceID) }
     /// "3", or "" off the numbered workspaces, as hooks and logs print it.
     func label(of space: UInt64) -> String { number(of: space).map { "\($0)" } ?? "" }
-
-    /// Calls `handler` whenever the numbering changes.
-    func observe(_ handler: @escaping () -> Void) { observers.append(handler) }
 
     /// Starts following display and Space changes. Call once, after the first `arrange()`.
     func start() {
@@ -102,9 +89,16 @@ final class WorkspaceNumbers {
         guard !SpaceSwitcher.shared.switching else { return arrangeSoon(after: 0.3) }
         arranging = true
         defer { arranging = false }
+        withUpdates { arrangeSpaces() }
+        fflush(stdout)
+        onArranged?()
+    }
+
+    /// Every planner action may refresh displays; the caller's publication scope covers all of them,
+    /// recovery, and the coordinator's final read, including incomplete/action-failure exits.
+    private func arrangeSpaces() {
         let model = AppState.shared.displays
         let plan = WorkspacePlan(AppState.shared.config)
-        let start = binding
         // The plan forgets a workspace whose Space is not listed. One that is only between displays, listed by
         // WindowServer while CoreGraphics already calls its display offline, gets a moment to reappear.
         func unlisted() -> Bool {
@@ -113,7 +107,7 @@ final class WorkspaceNumbers {
         }
         if unlisted() { _ = waitUntil(2) { !unlisted() } }
         // Following the Space order, Spaces reordered since the last run are renumbered rather than put back.
-        if AppState.shared.config.followSpaceOrder { binding = plan.renumbered(planDisplays(), binding: binding) }
+        if AppState.shared.config.followSpaceOrder { renumber(plan, on: planDisplays()) }
         var completed = false
         for _ in 0..<50 {
             let displays = planDisplays()
@@ -138,11 +132,7 @@ final class WorkspaceNumbers {
         case .leaveThem: print("workspaces: windows a display change moved off their workspace stay where they are")
         case .nothing: break
         }
-        // Observers hear the result once, not every step on the way.
-        announce(since: start)
-        fflush(stdout)
         AppState.shared.coordinator?.reconcile()
-        onArranged?()
     }
 
     /// Numbers the Spaces as they stand, taking one plan step without carrying it out, so `workspace <n>`, the
@@ -150,16 +140,16 @@ final class WorkspaceNumbers {
     /// that are gone, and started disabled there is none. A workspace the step would move stays on the Space its
     /// windows are on; one it would create stays unbound until enabling creates it.
     private func numberInPlace() {
-        let displays = planDisplays()
-        let start = binding
-        let plan = WorkspacePlan(AppState.shared.config)
-        if AppState.shared.config.followSpaceOrder { binding = plan.renumbered(displays, binding: binding) }
-        let step = plan.step(displays, binding: binding, occupied: occupiedSpaces(among: displays.flatMap(\.spaces)))
-        binding = step.binding
-        if case .move(let from, let to) = step.action, let n = binding.first(where: { $0.value == to })?.key {
-            binding[n] = from
+        withUpdates {
+            let displays = planDisplays()
+            let plan = WorkspacePlan(AppState.shared.config)
+            if AppState.shared.config.followSpaceOrder { renumber(plan, on: displays) }
+            let step = plan.step(displays, binding: binding, occupied: occupiedSpaces(among: displays.flatMap(\.spaces)))
+            binding = step.binding
+            if case .move(let from, let to) = step.action, let n = binding.first(where: { $0.value == to })?.key {
+                binding[n] = from
+            }
         }
-        announce(since: start)
         fflush(stdout)
         onArranged?()
     }
@@ -168,16 +158,15 @@ final class WorkspaceNumbers {
     /// Mission Control or macOS rearranging them. Only the numbers change; windows stay on their Spaces.
     private func followSpaceOrder(_ model: DisplayModel) {
         guard AppState.shared.config.followSpaceOrder, !arranging else { return }
-        let start = binding
-        binding = WorkspacePlan(AppState.shared.config).renumbered(planDisplays(model), binding: binding)
-        guard binding != start else { return }
-        print("workspaces: renumbered to follow the Space order")
-        let moved = Set(binding.filter { start[$0.key] != $0.value }.values)
-        onRenumbered?(Set(model.displays.filter { $0.userSpaces.contains(where: moved.contains) }.map(\.uuid)))
-        announce(since: start)
+        withUpdates {
+            let start = binding
+            renumber(WorkspacePlan(AppState.shared.config), on: planDisplays(model))
+            guard binding != start else { return }
+            print("workspaces: renumbered to follow the Space order")
+            // Layout settings go by workspace number, so each Space's are resolved again.
+            if AppState.shared.enabled { AppState.shared.coordinator?.reconcile() }
+        }
         fflush(stdout)
-        // Layout settings go by workspace number, so each Space's are resolved again.
-        if AppState.shared.enabled { AppState.shared.coordinator?.reconcile() }
     }
 
     /// The displays as the plan sees them, read afresh.
@@ -192,13 +181,6 @@ final class WorkspaceNumbers {
         model.displays.map {
             PlanDisplay(uuid: $0.uuid, monitor: model.monitor($0), spaces: $0.userSpaces, current: $0.currentSpaceID)
         }
-    }
-
-    /// Logs the numbering and tells observers, if it changed since `start`.
-    private func announce(since start: [Int: UInt64]) {
-        guard binding != start else { return }
-        print("workspaces: " + binding.keys.sorted().map { "\($0)=\(binding[$0]!)" }.joined(separator: " "))
-        observers.forEach { $0() }
     }
 
     /// The displays connected now, as WindowServer lists them. The display model hears of a change a moment

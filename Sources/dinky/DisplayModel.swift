@@ -44,14 +44,20 @@ struct Display: Equatable {
 // Refreshed from WindowServer Space events, screen reconfiguration, a poll and `reconcile()`. Main thread only.
 final class DisplayModel {
     private(set) var displays: [Display] = []
+    private let readSnapshot: (() -> [Display])?
     /// The Space each display was on before its current one, by display UUID, for back-and-forth.
     private var previousSpaceIDs: [String: UInt64] = [:]
     /// The Space each display last settled on: a swipe passes through the Spaces between, which don't count.
     private var settledSpaceIDs: [String: UInt64] = [:]
     private var observers: [(DisplayModel) -> Void] = []
+    private var settledObservers: [(DisplayModel) -> Void] = []
     /// The UUID of a display `focus-monitor` focused without a window to focus there. It stands in for the
     /// focused window's display until focus next changes.
     var focusOverride: String?
+
+    init(readSnapshot: (() -> [Display])? = nil) {
+        self.readSnapshot = readSnapshot
+    }
 
     /// Reads the displays and follows their changes from then on. Call once.
     func start() {
@@ -76,7 +82,7 @@ final class DisplayModel {
 
     /// Re-reads every display from WindowServer. Records previous Spaces and publishes if anything changed.
     func reconcile() {
-        let fresh = readDisplays()
+        let fresh = readSnapshot?() ?? readDisplays()
         // Also when nothing else changed: a swipe that gave up settles where it already was.
         for display in fresh {
             if let target = SpaceSwitcher.shared.target(on: display.uuid), target != display.currentSpaceID { continue }
@@ -93,11 +99,18 @@ final class DisplayModel {
         settledSpaceIDs = settledSpaceIDs.filter { uuid, _ in fresh.contains { $0.uuid == uuid } }
         displays = fresh
         observers.forEach { $0(self) }
+        settledObservers.forEach { $0(self) }
     }
 
     /// Calls `handler` after every change, in the order observers were added.
     func observe(_ handler: @escaping (DisplayModel) -> Void) {
         observers.append(handler)
+    }
+
+    /// External effects consume the snapshot after derived state (including numbering) has updated,
+    /// regardless of startup registration order.
+    func observeAfterUpdates(_ handler: @escaping (DisplayModel) -> Void) {
+        settledObservers.append(handler)
     }
 
     /// The display chosen by `focus-monitor`, else that of the focused window (or `window`), else the one under

@@ -20,7 +20,7 @@
     "follow-space-order": {
       "type": "boolean",
       "default": false,
-      "description": "Renumber workspaces when Spaces are reordered in Mission Control: on each display the leftmost Space becomes its lowest-numbered workspace, and windows stay put. False keeps each workspace's number and moves its windows back at the next arrangement."
+      "description": "Renumber workspaces when Spaces are reordered within a display in Mission Control. Windows stay put; workspace settings follow the new numbers. Display assignments still win across displays. False keeps each workspace's number and moves its windows back at the next arrangement."
     },
     "workspace-to-display": {
       "type": "object",
