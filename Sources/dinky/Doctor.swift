@@ -39,12 +39,9 @@ func runDoctor(_ args: [String]) -> Int32 {
     } else {
         ok("Spaces are not auto-rearranged")
     }
-    if config.followAppActivation.enabled {
-        if dockSetting("workspaces-auto-swoosh") ?? true {
-            warn("\"When switching to an application, switch to a Space with open windows\" is on; Cmd-Tab will use macOS's slow switch instead of dinky's. The app's onboarding can turn it off")
-        } else {
-            ok("Cmd-Tab switching goes through dinky")
-        }
+    if let status = spaceSwitchingStatus(autoSwoosh: dockSetting("workspaces-auto-swoosh") ?? true,
+                                         followsActivation: config.followAppActivation.enabled) {
+        status.warning ? warn(status.message) : ok(status.message)
     }
 
     // Where the workspaces go with the displays connected now; the app arranges the Spaces to match.
@@ -75,6 +72,19 @@ func runDoctor(_ args: [String]) -> Int32 {
 
     print("\(errors) errors, \(warnings) warnings")
     return errors == 0 ? 0 : 1
+}
+
+/// Describes the persistent macOS preference, not whether the app is running. Never changes it.
+func spaceSwitchingStatus(autoSwoosh: Bool, followsActivation: Bool) -> (warning: Bool, message: String)? {
+    if autoSwoosh {
+        return followsActivation
+            ? (true, "\"When switching to an application, switch to a Space with open windows\" is on; Cmd-Tab will use macOS's slow switch instead of dinky's. The app's onboarding can turn it off")
+            : nil
+    }
+    let recovery = "To restore macOS switching, turn on \"When switching to an application, switch to a Space with open windows\" in System Settings > Desktop & Dock > Mission Control."
+    return followsActivation
+        ? (false, "macOS Space switching is off; dinky follows app activation only while running and enabled. \(recovery)")
+        : (true, "macOS Space switching and follow-app-activation are both off; activating an app on another Space may show only its menu bar. \(recovery)")
 }
 
 /// A boolean Dock setting, nil when unset.

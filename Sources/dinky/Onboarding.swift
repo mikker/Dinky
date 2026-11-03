@@ -51,8 +51,9 @@ final class Onboarding: NSObject {
     private func showSwooshStep() {
         show(title: "Faster Cmd-Tab",
              text: "macOS's \"When switching to an application, switch to a Space with open windows\" setting "
-                 + "slides slowly to the app's Space on Cmd-Tab. With it off, dinky follows the switch instantly. "
-                 + "Turning it off restarts the Dock.",
+                 + "slides slowly to the app's Space on Cmd-Tab. With it off, dinky can follow the switch instantly while enabled. "
+                 + "This stays off after dinky quits. To switch Spaces without dinky, turn it back on in "
+                 + "System Settings > Desktop & Dock > Mission Control. Turning it off restarts the Dock.",
              buttons: [button("Turn It Off", #selector(turnOffSwoosh)), button("Leave It", #selector(leaveSwoosh))])
     }
 

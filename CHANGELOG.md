@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Onboarding explains that turning off macOS app-activation Space switching persists after dinky quits. `dinky doctor` shows how to restore it, including when `follow-app-activation` is off. Document the Quicksilver symptom and how to use Magnet or Rectangle with floating windows or dinky disabled (#62).
+
 ## 0.23
 
 ### Configuration

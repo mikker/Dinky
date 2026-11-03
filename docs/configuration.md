@@ -39,6 +39,9 @@ file is left alone, with the read error shown in the menu.
 ## `[follow-app-activation]`
 
 The table form of `follow-app-activation`, in place of the top-level line.
+Following works only while dinky is running and enabled. Turning it off does
+not restore macOS's persistent Space-switching preference; see
+[First run](index.md#first-run) to restore switching without dinky.
 
 <div class="wide-table" markdown="1">
 

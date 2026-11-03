@@ -61,5 +61,10 @@ let package = Package(
             // The app bundle carries Sparkle.framework in Contents/Frameworks.
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
+        .testTarget(
+            name: "DinkyAppTests",
+            dependencies: ["dinky"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
     ]
 )

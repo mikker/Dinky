@@ -2,7 +2,8 @@ import Darwin
 
 // Other tiling window managers. Two tilers move the same windows back and forth, and to the user that looks like
 // dinky cannot tile: frames snap back, workspaces fall back to another layout, and the readback teaches dinky
-// minimum sizes that are not real. Snapping tools (Rectangle, Magnet) only move windows when asked and are left out.
+// minimum sizes that are not real. Snapping tools (Rectangle, Magnet) only move windows when asked and are left out;
+// float the window or disable dinky before snapping it, since tiled frames are still recovered.
 
 /// By lowercased process name, the tiler's display name. Process names cover apps and plain daemons (yabai) alike.
 private let tilers = ["aerospace": "AeroSpace", "amethyst": "Amethyst", "yabai": "yabai", "kiwidesk": "KiwiDesk"]

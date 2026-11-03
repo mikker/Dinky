@@ -76,7 +76,11 @@ to the signature, so ad-hoc builds lose it on every rebuild.
 dinky writes `~/.config/dinky/dinky.toml`, asks for Accessibility, and offers
 once to turn off "When switching to an application, switch to a Space with
 open windows" (Desktop & Dock > Mission Control). With that off, Cmd-Tab and
-Dock clicks switch Spaces the fast way instead of sliding. Saying no is fine.
+Dock clicks switch Spaces the fast way instead of sliding while dinky is running
+and enabled. Saying no is fine. This is a persistent macOS preference: quitting
+or disabling dinky does not turn it back on. If activating an app with Quicksilver,
+Cmd-Tab or the Dock shows only its menu bar instead of switching to its Space,
+turn the setting back on in System Settings > Desktop & Dock > Mission Control.
 
 The menu bar shows the current workspace. Its menu has the everyday commands
 (workspaces, focus, move, join, resize, layout, displays and modes), each with
@@ -90,6 +94,17 @@ place, or workspace numbers move around; `dinky doctor` warns while it's on.
 Run one tiling window manager at a time. With AeroSpace, Amethyst, yabai or
 KiwiDesk also running, each undoes the other's layouts; dinky shows a `!` in the
 menu bar and says which one to quit.
+
+### Magnet and Rectangle
+
+To snap a window with Magnet or Rectangle, first float it with
+`dinky layout floating`, or disable dinky with `dinky enable off` before snapping.
+dinky keeps tiled windows in their layout, including after another app moves or
+resizes them; a snapping command does not automatically float a window. Snapping
+tools are not included in the warning about other tiling window managers.
+Use `dinky layout tiling` to tile the window again, or `dinky enable on` to resume
+tiling after disabling dinky. For a workspace-filling window managed by dinky,
+use [`dinky fullscreen`](commands.md) instead.
 
 ## Uninstall
 
