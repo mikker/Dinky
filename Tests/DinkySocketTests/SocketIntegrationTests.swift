@@ -38,6 +38,23 @@ struct SocketIntegrationTests {
         #expect(reply?.text == request)
     }
 
+    @Test func `Half-close racing a receive never loses EOF`() async throws {
+        let request = script
+        let server = try Server { line in
+            #expect(line == request)
+            return .ok("complete")
+        }
+        try await Task.detached {
+            // Repeated fresh connections exercise EOF arriving during a receive, not a retry:
+            // every request must succeed on its first and only attempt.
+            for connection in 0..<4096 {
+                let reply = try #require(sendToApp(request, path: server.path))
+                try #require(reply.ok, "Connection \(connection): \(reply.text)")
+                try #require(reply.text == "complete")
+            }
+        }.value
+    }
+
     @Test func `Fragmented multiline UTF8 is not dispatched before half-close`() async throws {
         let request = script
         let server = try Server { line in

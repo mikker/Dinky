@@ -46,6 +46,30 @@ struct SocketIOTests {
         #expect(throws: SocketError.self) { try readAll(pair.b) }
     }
 
+    @Test(arguments: [false, true])
+    func `Incoming bytes reset the idle deadline and no timeout keeps waiting`(timed: Bool) throws {
+        let pair = try Pair()
+        if timed {
+            var timeout = timeval(tv_sec: 0, tv_usec: 200_000)
+            try #require(setsockopt(pair.b, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                                   socklen_t(MemoryLayout<timeval>.size)) == 0)
+        }
+        let writer = Thread {
+            defer { shutdown(pair.a, SHUT_WR) }
+            do {
+                // The whole stream exceeds 200 ms, but no individual gap does.
+                for _ in 0..<8 {
+                    usleep(50_000)
+                    try writeAll(pair.a, "x")
+                }
+            } catch {
+                Issue.record("Writer failed: \(error)")
+            }
+        }
+        writer.start()
+        #expect(try readAll(pair.b) == "xxxxxxxx")
+    }
+
     @Test func `Writing to a disconnected peer throws without SIGPIPE`() throws {
         var fds: [Int32] = [0, 0]
         try #require(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds) == 0)

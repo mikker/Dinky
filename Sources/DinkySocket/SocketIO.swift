@@ -19,16 +19,34 @@ func readAll(_ fd: Int32) throws -> String {
     let limit = 1 << 20
     var data = [UInt8]()
     var buffer = [UInt8](repeating: 0, count: 4096)
+    var timeout = timeval()
+    var size = socklen_t(MemoryLayout<timeval>.size)
+    guard getsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, &size) == 0 else {
+        throw SocketError.system(errno)
+    }
+    let idle = Double(timeout.tv_sec) + Double(timeout.tv_usec) / 1_000_000
+    var deadline = ProcessInfo.processInfo.systemUptime + idle
     while true {
-        let n = read(fd, &buffer, min(buffer.count, limit - data.count + 1))
+        // Darwin's timed blocking receives can miss a racing half-close, then time out with EOF
+        // already readable. Wait for readiness instead; never mistake an idle timeout for EOF.
+        let n = recv(fd, &buffer, min(buffer.count, limit - data.count + 1), MSG_DONTWAIT)
         if n == 0 { break }
         if n < 0 {
             if errno == EINTR { continue }
-            if errno == EAGAIN || errno == EWOULDBLOCK { throw SocketError.timedOut }
-            throw SocketError.system(errno)
+            guard errno == EAGAIN || errno == EWOULDBLOCK else { throw SocketError.system(errno) }
+            let milliseconds = idle > 0
+                ? Int32(min(Double(Int32.max), max(0, ceil((deadline - ProcessInfo.processInfo.systemUptime) * 1000))))
+                : -1 // The CLI's unconfigured socket waits indefinitely for a slow command's reply.
+            var event = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+            let ready = poll(&event, 1, milliseconds)
+            if ready < 0, errno == EINTR { continue }
+            guard ready >= 0 else { throw SocketError.system(errno) }
+            guard ready > 0 else { throw SocketError.timedOut }
+            continue
         }
         data += buffer[..<n]
         guard data.count <= limit else { throw SocketError.tooLarge }
+        deadline = ProcessInfo.processInfo.systemUptime + idle
     }
     guard let string = String(bytes: data, encoding: .utf8) else { throw SocketError.invalidUTF8 }
     return string

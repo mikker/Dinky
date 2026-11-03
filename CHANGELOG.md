@@ -21,6 +21,7 @@
 - Pause layout writes, animations and restacking while a macOS overview is detected. Pending layout changes coalesce on exit; disabling or quitting still restores the original windows (#29).
 - A command longer than 4 KiB that spans several lines, such as a multi-line `exec-and-forget` script, reaches the app whole. Before, the app stopped reading at the first 4 KiB chunk holding a newline, ran the cut-off script and still answered `ok`.
 - Incomplete socket requests that time out, exceed 1 MiB or contain invalid UTF-8 are rejected instead of executing a partial command. Raw clients must close their writing half to finish a request.
+- Complete socket requests no longer intermittently fail with a receive timeout when the client closes its writing half during a receive.
 
 ### Other
 
