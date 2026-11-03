@@ -3,6 +3,7 @@ build:
 
 test:
     swift test
+    python3 -m unittest discover -s scripts/tests -v
 
 bundle *flags:
     scripts/bundle.sh {{flags}}

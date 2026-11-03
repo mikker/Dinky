@@ -34,3 +34,4 @@ jobs:
           swift --version
       - run: swift build
       - run: swift test
+      - run: python3 -m unittest discover -s scripts/tests -v

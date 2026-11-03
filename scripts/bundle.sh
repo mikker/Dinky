@@ -11,12 +11,16 @@ SIGN_FLAGS="${SIGN_FLAGS:-}"  # release packaging adds --options runtime --times
 CONFIG=release
 [[ "${1:-}" == "--debug" ]] && CONFIG=debug
 
-swift build -c "$CONFIG"
+BUILD_FLAGS=(-c "$CONFIG" --jobs 4)
+if [[ "$CONFIG" == release ]]; then
+  BUILD_FLAGS+=(--arch arm64 --arch x86_64)
+fi
+swift build "${BUILD_FLAGS[@]}"
 
 APP=build/dinky.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
-cp "$(swift build -c "$CONFIG" --show-bin-path)/dinky" "$APP/Contents/MacOS/dinky"
+cp "$(swift build "${BUILD_FLAGS[@]}" --show-bin-path)/dinky" "$APP/Contents/MacOS/dinky"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$BUILD" "$APP/Contents/Info.plist"
@@ -36,6 +40,10 @@ SPARKLE_SRC="$(find .build/artifacts -maxdepth 6 -path '*macos-arm64_x86_64/Spar
 [[ -n "$SPARKLE_SRC" ]] || { echo 'Sparkle.framework not found in .build/artifacts' >&2; exit 1; }
 mkdir -p "$APP/Contents/Frameworks"
 ditto "$SPARKLE_SRC" "$APP/Contents/Frameworks/Sparkle.framework"
+
+if [[ "$CONFIG" == release ]]; then
+  scripts/check-universal.sh "$APP"
+fi
 
 # Sign inside out: Sparkle's helpers, the framework, then the app.
 sign() { codesign --force $SIGN_FLAGS --sign "$IDENTITY" "$1"; }

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Releases are universal for Apple silicon and Intel Macs running macOS 15 or later, including Homebrew installs and Sparkle updates (#63, following #43; thanks @ChrisGVE for the proposal).
 - Onboarding explains that turning off macOS app-activation Space switching persists after dinky quits. `dinky doctor` shows how to restore it, including when `follow-app-activation` is off. Document the Quicksilver symptom and how to use Magnet or Rectangle with floating windows or dinky disabled (#62).
 
 ### Configuration

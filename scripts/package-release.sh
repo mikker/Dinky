@@ -14,6 +14,7 @@ build="$(( $(git rev-list --count HEAD) + 100 ))"
 
 echo "==> Building and signing dinky.app $version ($build) with $identity"
 VERSION="$version" BUILD="$build" IDENTITY="$identity" SIGN_FLAGS="--options runtime --timestamp" scripts/bundle.sh
+scripts/check-universal.sh build/dinky.app
 codesign --verify --strict --verbose=1 build/dinky.app
 
 mkdir -p dist
@@ -26,6 +27,10 @@ xcrun stapler staple build/dinky.app
 spctl --assess --type execute --verbose=1 build/dinky.app
 
 ditto -c -k --sequesterRsrc --keepParent build/dinky.app dist/dinky.app.zip
+
+# Check the actual shipping archive too, before generating an unrestricted Homebrew cask.
+ditto -x -k dist/dinky.app.zip "$tmp/unpacked"
+scripts/check-universal.sh "$tmp/unpacked/dinky.app"
 
 echo "==> Signing the update and writing the appcast and the cask"
 sign_update="$(find .build/artifacts -path '*/Sparkle/bin/sign_update' | head -1)"

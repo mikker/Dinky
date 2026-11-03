@@ -14,7 +14,6 @@ cask "dinky" do
 
   auto_updates true
   depends_on macos: :sequoia
-  depends_on arch: :arm64
 
   app "dinky.app"
   binary "#{appdir}/dinky.app/Contents/MacOS/dinky"
