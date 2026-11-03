@@ -25,14 +25,14 @@ final class FrameApplier {
     private let raiseQueue = DispatchQueue(label: "dinky.frames.raise")
     /// A pass's raise waits for its slowest app, so a newer pass can raise first; the older one is then skipped.
     private let passes = LatestPasses()
-    private static let supportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("dinky")
-    private static let minimumsURL = supportURL.appendingPathComponent("learned-minimum-sizes.json")
+    private let minimumsURL: URL
 
-    init() {
+    init(supportURL: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("dinky")) {
+        minimumsURL = supportURL.appendingPathComponent("learned-minimum-sizes.json")
         // Saved before minimums needed two different sizes asked: Terminal's grid could pass for one there.
-        try? FileManager.default.removeItem(at: Self.supportURL.appendingPathComponent("minimum-sizes.json"))
-        appMinimums = Self.loadMinimums()
+        try? FileManager.default.removeItem(at: supportURL.appendingPathComponent("minimum-sizes.json"))
+        appMinimums = loadMinimums()
         scheduler = FrameScheduler(
             beforeBatch: { pid in Self.suppressEnhancedUI(pid) },
             read: { [unowned self] job in withElement(pid: job.pid, id: job.id, frame) ?? nil },
@@ -83,7 +83,7 @@ final class FrameApplier {
     func forgetMinimums() {
         scheduler.forgetMinimums()
         lock.withLock { appMinimums = [:] }
-        try? FileManager.default.removeItem(at: Self.minimumsURL)
+        try? FileManager.default.removeItem(at: minimumsURL)
     }
 
     /// Drops every frame not written yet.
@@ -159,7 +159,7 @@ final class FrameApplier {
         }
     }
 
-    private static func loadMinimums() -> [String: CGSize] {
+    private func loadMinimums() -> [String: CGSize] {
         guard let data = try? Data(contentsOf: minimumsURL),
               let raw = try? JSONDecoder().decode([String: [CGFloat]].self, from: data) else { return [:] }
         return raw.compactMapValues { $0.count == 2 ? CGSize(width: $0[0], height: $0[1]) : nil }
@@ -168,8 +168,8 @@ final class FrameApplier {
     private func saveMinimums() {
         let raw = lock.withLock { appMinimums.mapValues { [$0.width, $0.height] } }
         guard let data = try? JSONEncoder().encode(raw) else { return }
-        try? FileManager.default.createDirectory(at: Self.minimumsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? data.write(to: Self.minimumsURL, options: .atomic)
+        try? FileManager.default.createDirectory(at: minimumsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: minimumsURL, options: .atomic)
     }
 
     /// Raising a window of the frontmost app makes it that app's key window. So windows are raised only when

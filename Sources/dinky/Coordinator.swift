@@ -32,7 +32,7 @@ final class Coordinator {
 
     let displays: DisplayModel
     private(set) var config: Config
-    let applier = FrameApplier()
+    let applier: FrameApplier
     private lazy var animator = Animator(applier: applier)
     private var borders: BorderManager?
     func isBorderWindow(_ id: WindowID) -> Bool { borders?.isBorder(id) ?? false }
@@ -76,9 +76,10 @@ final class Coordinator {
     /// While set, `flush` leaves the trees for later. See `spacesShown`.
     private var holding = false
 
-    init(displays: DisplayModel, config: Config) {
+    init(displays: DisplayModel, config: Config, applier: FrameApplier = FrameApplier()) {
         self.displays = displays
         self.config = config
+        self.applier = applier
     }
 
     /// `beforeTiling` runs once the model has read every window, whether or not it is subscribed to events, and
@@ -354,7 +355,7 @@ final class Coordinator {
         placements[window.id]!.space = new
     }
 
-    private func forget(_ id: WindowID) {
+    func forget(_ id: WindowID) {
         windowIdentifiers[id] = nil
         attempts[id] = nil
         adoptTargets[id] = nil

@@ -4,6 +4,10 @@
 
 - Onboarding explains that turning off macOS app-activation Space switching persists after dinky quits. `dinky doctor` shows how to restore it, including when `follow-app-activation` is off. Document the Quicksilver symptom and how to use Magnet or Rectangle with floating windows or dinky disabled (#62).
 
+### Configuration
+
+- Window rules can match `window-identifier` or reject `exclude-window-identifier` using case-insensitive regexes against Accessibility's `AXIdentifier`. Exclusions skip the whole rule, including workspace moves. Inspect cached identifiers with `%{window-identifier}` in `list-windows` or `window-identifier` in `debug-state` (#59, thanks @albertomalossi; fixes #56).
+
 ## 0.23
 
 ### Configuration

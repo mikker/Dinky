@@ -26,6 +26,15 @@ extension Coordinator {
         AXUIElementIsAttributeSettable(element, kAXSizeAttribute as CFString, &resizable)
         let title = axString(element, kAXTitleAttribute) ?? ""
         let identifier = axString(element, "AXIdentifier").flatMap { $0.isEmpty ? nil : $0 }
+        return classify(window, kind: kind, resizable: resizable.boolValue, title: title, identifier: identifier,
+                        lacksFullscreen: lacksFullscreen(element, bundleID: window.bundleID))
+    }
+
+    /// Applies the AX facts read above. Keep command scheduling separate from execution: a window must be
+    /// placed before its workspace commands run. The fullscreen heuristic stays lazy and cannot override rules.
+    func classify(_ window: Window, kind: WindowKind, resizable: Bool, title: String, identifier: String?,
+                  lacksFullscreen: @autoclosure () -> Bool,
+                  enqueue: (Command, UInt32) -> Void = enqueueRule) -> (floating: Bool, runsRules: Bool) {
         windowIdentifiers[window.id] = identifier
         // `layout floating` and `layout tiling` decide here, the last one wins. Other rule commands, such as
         // move-window-to-workspace, run for this window once it is placed.
@@ -37,15 +46,19 @@ extension Coordinator {
             case .layout([.tiling]): floats = false
             default:
                 runsRules = true
-                DispatchQueue.main.async {
-                    let reply = Dispatcher.run(command, window: window.id)
-                    if !reply.ok { fputs("rule: \(reply.text)\n", stderr) }
-                }
+                enqueue(command, window.id)
             }
         }
-        let floating = kind != .normal || !resizable.boolValue
-            || (floats ?? (config.floatWindowsWithoutFullscreen && lacksFullscreen(element, bundleID: window.bundleID)))
+        let floating = kind != .normal || !resizable
+            || (floats ?? (config.floatWindowsWithoutFullscreen && lacksFullscreen()))
         return (floating, runsRules)
+    }
+}
+
+private func enqueueRule(_ command: Command, _ window: UInt32) {
+    DispatchQueue.main.async {
+        let reply = Dispatcher.run(command, window: window)
+        if !reply.ok { fputs("rule: \(reply.text)\n", stderr) }
     }
 }
 
@@ -80,7 +93,7 @@ private func buttonEnabled(_ element: AXUIElement, _ attribute: String) -> Bool 
 
 extension Config {
     /// The commands of every rule that matches, in order. Commands that do not parse are skipped.
-    func commands(for window: Window, kind: WindowKind, title: String, identifier: String? = nil) -> [Command] {
+    func commands(for window: Window, kind: WindowKind, title: String, identifier: String?) -> [Command] {
         rules.filter { $0.matches(appId: window.bundleID, appName: window.appName, title: title, kind: kind, windowIdentifier: identifier) }
             .flatMap { $0.run.compactMap { try? Command.parse($0) } }
     }
@@ -101,4 +114,3 @@ private func axString(_ element: AXUIElement, _ attribute: String) -> String? {
     guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
     return value as? String
 }
-
