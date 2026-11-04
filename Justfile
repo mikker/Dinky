@@ -1,8 +1,8 @@
 build:
-    swift build
+    swift build --jobs 4
 
 test:
-    swift test
+    swift test --jobs 4
     python3 -m unittest discover -s scripts/tests -v
 
 bundle *flags:

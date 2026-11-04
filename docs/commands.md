@@ -75,6 +75,15 @@ reply until EOF. The CLI and macOS `nc` do this automatically. A newline alone
 does not finish a request. The app rejects an incomplete request after two seconds
 without incoming data, or an oversized or invalid UTF-8 request, without running it.
 
+**Upgrading raw clients from 0.23:** sending a newline and waiting is no longer
+enough; half-close the writing side to submit the command. The normal CLI and
+macOS `nc` already do this.
+
+The CLI also rejects replies over 1 MiB (including the status header), invalid
+UTF-8 replies and transport failures rather than printing partial output. The
+command may already have run when receiving its reply fails. Narrow large list
+queries with filters or `--format`, or use a raw socket client for larger replies.
+
 ## Recovery
 
 dinky journals each window's original frame and Space before tiling it. `enable
@@ -83,6 +92,11 @@ be put back (display gone, app not answering) stays journaled and is tried again
 by the next disable, quit or `dinky recover`, unless you move it first. After a
 crash, the menu offers to restore them (or `dinky recover`); dinky stays off
 until `dinky enable on`.
+
+While Mission Control or App Exposé is detected, automatic layout writes,
+animations and restacking pause. Visible workspaces apply their pending layout
+when the overview closes; hidden workspaces wait until shown. Disabling or
+quitting still restores the original windows during overview.
 
 ## Scripting
 
@@ -136,6 +150,11 @@ fires only for dinky's own switches, so draw the target there and the real
 state on `workspace-changed`, which always follows. `mode-changed` sets
 `DINKY_MODE` and `DINKY_PREV_MODE`; `dinky list-modes --current` prints the
 mode at any time. `exec-and-forget` has `dinky` and Homebrew on `PATH`.
+
+With `follow-space-order`, renumbering can send `workspace-changed` with equal
+`DINKY_WORKSPACE` and `DINKY_PREV_WORKSPACE`: the workspace contents changed even
+though the visible number did not. Bars should still refresh on that notification.
+See [hooks](configuration.md#hooks) for switch settlement and renumbering behavior.
 
 ### Docking
 

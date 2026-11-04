@@ -36,7 +36,7 @@ extension Config {
     # layout = 'accordion'
 
     [accordion]
-    padding = 30                    # points the neighbours peek out by
+    padding = 30                    # maximum points the neighbours peek out by
     orientation = 'auto'            # auto: run along the container's longer side | keep
 
     [scrolling]
@@ -78,7 +78,7 @@ extension Config {
     [swipe]
     enabled = false                 # the Spaces swipe focuses the next window of a tiled workspace first
     space-switch = 'instant'        # instant (focus, then switch past the edge) | native (macOS also acts); native on macOS 27+
-    vertical = false                # up and down too: windows above and below, then Mission Control or App Exposé
+    vertical = false                # up and down too; always native, so macOS may also open an overview
 
     [animations]
     enabled = true                  # windows glide to their tiles; off while Reduce Motion is on

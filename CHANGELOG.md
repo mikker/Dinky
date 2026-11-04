@@ -2,34 +2,34 @@
 
 ## Unreleased
 
-- Releases are universal for Apple silicon and Intel Macs running macOS 15 or later, including Homebrew installs and Sparkle updates (#63, following #43; thanks @ChrisGVE for the proposal).
-- Onboarding explains that turning off macOS app-activation Space switching persists after dinky quits. `dinky doctor` shows how to restore it, including when `follow-app-activation` is off. Document the Quicksilver symptom and how to use Magnet or Rectangle with floating windows or dinky disabled (#62).
+**Upgrading scripts:** Raw socket clients must close their writing half after sending a request; a newline no longer submits it. The normal CLI and macOS `nc` already do this. The CLI now rejects replies over 1 MiB: narrow large list queries with filters or `--format`, or use a raw socket client for larger replies.
+
+### Compatibility
+
+- Releases now run on Apple silicon and Intel Macs with macOS 15 or later, including Homebrew installs and automatic updates (#63, thanks @ChrisGVE).
+- Onboarding and `dinky doctor` explain that turning off macOS app-activation Space switching persists after quitting, and how to restore native switching for Quicksilver, Cmd-Tab and Dock clicks (#62).
 
 ### Layout
 
-- `[master] side = 'center'` centres the master for wide displays, after Hyprland's `orientation = center`. From the second stacked window on, the master takes the middle and the stack splits in two beside it: new windows alternate right and left, and the stacks stay even as windows close. With one window stacked, the master takes the left.
-- Centered stacks keep any extra window on the right after a close, so flattening or switching sides and back preserves their arrangement. A focused window moved between accordion stacks stays on top.
-- Accordion peeks shrink in narrow containers to leave usable window content, including horizontal stacks beside a wide centered master. Parent containers relax peek budgets before giving up on recorded window minima that fit without peeks.
+- `[master] side = 'center'` puts the master between two balanced stacks on wide displays. New windows alternate right and left; closing windows keeps the stacks even. With just one stacked window, the master stays on the left (#60).
 
 ### Configuration
 
-- New `follow-space-order` renumbers workspaces when you reorder Spaces within a display in Mission Control. Windows stay where they are, and the menu bar and `workspace-changed` hooks update, including when enabling the option with a config reload. Workspace settings follow the new numbers; display assignments still win when a Space moves between displays. Off by default: a workspace keeps its number, and the next arrangement moves its windows back to that number's place.
-- Window rules can match `window-identifier` or reject `exclude-window-identifier` using case-insensitive regexes against Accessibility's `AXIdentifier`. Exclusions skip the whole rule, including workspace moves. Inspect cached identifiers with `%{window-identifier}` in `list-windows` or `window-identifier` in `debug-state` (#59, thanks @albertomalossi; fixes #56).
-
-### Fixes
-
-- Pause layout writes, animations and restacking while a macOS overview is detected. Pending layout changes coalesce on exit; disabling or quitting still restores the original windows (#29).
-- A command longer than 4 KiB that spans several lines, such as a multi-line `exec-and-forget` script, reaches the app whole. Before, the app stopped reading at the first 4 KiB chunk holding a newline, ran the cut-off script and still answered `ok`.
-- Incomplete socket requests that time out, exceed 1 MiB or contain invalid UTF-8 are rejected instead of executing a partial command. Raw clients must close their writing half to finish a request.
-- Complete socket requests no longer intermittently fail with a receive timeout when the client closes its writing half during a receive.
-
-### Other
-
-- The socket transport moved into a `DinkySocket` module with unit and private-socket server/client integration tests.
+- New `follow-space-order = true` follows Mission Control reordering within each display. Windows stay put; workspace settings follow the new numbers, and the menu bar and hooks refresh. Display assignments still take precedence. Off by default (#58, thanks @ykisana).
+- Rules can match `window-identifier` or skip a whole rule with `exclude-window-identifier`, using case-insensitive regexes against Accessibility identifiers. Discover identifiers with `%{window-identifier}` in `list-windows` or in `debug-state` (#59, thanks @albertomalossi).
 
 ### Trackpad
 
-- New opt-in `[swipe]`: trackpad swipes move focus between tiled windows (scrolling columns, accordion children or tiles). Before macOS 27, `space-switch = 'instant'` switches Space only past the last window, once your fingers lift. Native mode passes the entire swipe to macOS: a full, quick swipe can both move focus and switch Space. `vertical = true` uses native mode up and down, so Mission Control or App Exposé can open even before the last window. On macOS 27+, instant mode falls back to native mode; IOHID swipe suppression is not enabled.
+- New opt-in `[swipe] enabled = true` moves focus between tiled windows with the Spaces swipe. Before macOS 27, `space-switch = 'instant'` switches Space only past the last window, once your fingers lift. On macOS 27 and later it falls back to native mode (#61).
+- Native mode passes the whole swipe to macOS, so a full swipe can both move focus and switch Space. Optional `vertical = true` also moves focus up and down, always natively; Mission Control or App Exposé can open before the last window.
+
+### Fixes
+
+- Accordion peeks shrink in narrow containers to leave usable window content, including beside a wide centered master. Focus stays on a surviving window when centered stacks rebalance.
+- Layout writes, animations and restacking pause while a macOS overview is detected. Pending visible layouts apply on exit; disabling or quitting still restores the original windows (#29).
+- Multi-line commands longer than 4 KiB, such as `exec-and-forget` scripts, reach the app whole instead of being cut off and answered with `ok` (#64).
+- Incomplete socket requests that time out, exceed 1 MiB or contain invalid UTF-8 are rejected without executing a partial command.
+- Complete socket requests no longer intermittently fail with a receive timeout when the client closes its writing half during a receive.
 
 ## 0.23
 

@@ -69,7 +69,7 @@ if [[ -z "$prepared" ]]; then
   [[ -n "$(changelog_section Unreleased)" ]] || { echo 'The ## Unreleased section of CHANGELOG.md is empty' >&2; exit 1; }
   git rev-parse --verify -q "$tag" >/dev/null && { echo "Tag $tag already exists" >&2; exit 1; }
   echo "==> Testing before preparing $version"
-  swift test
+  swift test --jobs 4
   sed -i '' "s/^## Unreleased\$/## $version/" CHANGELOG.md
   sed -i '' "s/^version: \".*\"\$/version: \"$version\"/" docs/_config.yml
   git commit -q -m "Release $version" CHANGELOG.md docs/_config.yml
@@ -94,7 +94,7 @@ if [[ "$(gh release view "$tag" -R "$repo" --json isDraft --jq .isDraft 2>/dev/n
   exit 0
 fi
 
-[[ -n "$prepared" ]] && swift test
+[[ -n "$prepared" ]] && swift test --jobs 4
 scripts/package-release.sh "$version"
 [[ "$head" == "$(git rev-parse HEAD)" && -z "$(git status --porcelain)" ]] || { echo 'Source changed during packaging; retry' >&2; exit 1; }
 

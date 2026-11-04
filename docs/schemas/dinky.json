@@ -135,7 +135,7 @@
           "type": "integer",
           "minimum": 0,
           "default": 30,
-          "description": "Points by which neighbouring windows peek out."
+          "description": "Maximum points by which neighbouring windows peek out; shrinks in narrow containers to leave content and respect recorded window minima."
         },
         "orientation": {
           "type": "string",
@@ -215,7 +215,7 @@
         "vertical": {
           "type": "boolean",
           "default": false,
-          "description": "Whether swipes up and down focus the windows below and above before Mission Control and App Exposé."
+          "description": "Swipes up and down focus windows below and above. Always passes the whole swipe to macOS, which can also open Mission Control or App Exposé before the last window, regardless of space-switch."
         }
       }
     },
@@ -281,7 +281,7 @@
         },
         "workspace-changed": {
           "$ref": "#/definitions/hook",
-          "description": "Whenever a display's current workspace changes. exec-and-forget gets DINKY_WORKSPACE, DINKY_PREV_WORKSPACE and DINKY_DISPLAY."
+          "description": "When a display's workspace changes or a switch settles or gives up, not on intermediate Spaces. With follow-space-order, also after renumbering even if the visible number is unchanged. exec-and-forget gets DINKY_WORKSPACE, DINKY_PREV_WORKSPACE and DINKY_DISPLAY."
         },
         "focus-changed": { "$ref": "#/definitions/hook", "description": "When the focused window changes, debounced by 50 ms." },
         "mode-changed": { "$ref": "#/definitions/hook", "description": "When the binding mode changes, including back to main when the config reloads. exec-and-forget gets DINKY_MODE and DINKY_PREV_MODE." },

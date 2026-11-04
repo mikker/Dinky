@@ -113,8 +113,9 @@ side = 'left'
 ## Tiles and accordion
 
 The two layout modes. Tiles share the container. An accordion gives it to the
-focused window, with the others peeking out `padding` points on each side;
-focus a neighbour and it comes to the front.
+focused window, with the others peeking out by up to `padding` points on each side.
+Peeks shrink in narrow containers to leave usable content and respect recorded
+window minima. Focus a neighbour and it comes to the front.
 
 <figure>
 {% include figures/tiles.svg %}

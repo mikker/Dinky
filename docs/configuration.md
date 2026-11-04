@@ -192,8 +192,9 @@ shorter stack, the right one on a tie, so they alternate right and left; when
 one closes, the bottom of the longer stack moves over to keep them even, with
 any extra window on the right. Flattening or switching sides and back preserves
 this arrangement. With one window stacked, the master takes the left, as Hyprland's does. `layout`
-changes both stacks, `swap-with-master` trades the master with the top of the
-right one, and `resize width` on the master widens it evenly into both.
+changes both stacks. With the master focused, `swap-with-master` trades it with
+the top of the right stack; with a stacked window focused, that window swaps
+with the master. `resize width` on the master widens it evenly into both stacks.
 
 A workspace that switches to the master layout, such as after you change its
 `layout`, makes the focused window the master and stacks the others beside it
@@ -340,10 +341,7 @@ your fingers left to go to the window on the right.
 With `vertical = true`, swipes up and down also move focus between windows
 above and below. These always use native mode: a full, quick swipe can both
 move focus and open Mission Control or App Exposé, not just past the last window.
-
-Up and down always go the `'native'` way, so macOS sees those swipes begin
-and end too, and a quick swipe down can open App Exposé even when dinky has
-moved focus. If App Exposé opens too readily, turn it off under **System
+To turn off the down swipe's App Exposé action, use **System
 Settings › Trackpad › More Gestures › App Exposé**. Mission Control keeps the
 swipe up.
 
@@ -574,7 +572,7 @@ fullscreen-width = 1.0          # share of the width a fullscreen window, or a w
 # layout = 'accordion'
 
 [accordion]
-padding = 30                    # points the neighbours peek out by
+padding = 30                    # maximum points the neighbours peek out by
 orientation = 'auto'            # auto: run along the container's longer side | keep
 
 [scrolling]
@@ -616,7 +614,7 @@ accordion-edges = true          # resting on a peeking accordion edge focuses th
 [swipe]
 enabled = false                 # the Spaces swipe focuses the next window of a tiled workspace first
 space-switch = 'instant'        # instant (focus, then switch past the edge) | native (macOS also acts); native on macOS 27+
-vertical = false                # up and down too: windows above and below, then Mission Control or App Exposé
+vertical = false                # up and down too; always native, so macOS may also open an overview
 
 [animations]
 enabled = true                  # windows glide to their tiles; off while Reduce Motion is on
