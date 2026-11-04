@@ -314,14 +314,17 @@ struct ConfigTests {
 
     @Test func borders() throws {
         #expect(Config().borders.order == .below)
+        #expect(Config().borders.loneWindow)
         let borders = try Config.parse("""
         [borders]
         order = 'above'
         width = 2.5
         exclude-apps = ['com.apple.finder', 'com.apple.Terminal']
+        lone-window = false
         """).borders
         #expect(borders.order == .above)
         #expect(borders.width == 2.5)
+        #expect(!borders.loneWindow)
         #expect(borders.excludeApps == ["com.apple.finder", "com.apple.Terminal"])
         #expect(!borders.decorates(bundleID: "com.apple.finder"))
         #expect(borders.decorates(bundleID: "com.apple.TextEdit"))
@@ -329,6 +332,7 @@ struct ConfigTests {
 
         assertError("[borders]\norder = 'over'\n", path: "borders.order", line: 2, contains: "'below', 'above'")
         assertError("[borders]\nexclude-apps = 'com.apple.finder'\n", path: "borders.exclude-apps", line: 2, contains: "list of strings")
+        assertError("[borders]\nlone-window = 'no'\n", path: "borders.lone-window", line: 2, contains: "true or false")
     }
 
     @Test func `Follow app activation`() throws {

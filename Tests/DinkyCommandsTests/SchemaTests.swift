@@ -124,6 +124,7 @@ struct SchemaTests {
         inactive-color = '#00ff0080'
         order = 'above'
         exclude-apps = ['com.apple.finder']
+        lone-window = false
 
         [focus-follows-mouse]
         enabled = true

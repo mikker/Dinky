@@ -69,6 +69,7 @@ extension Config {
     inactive-color = '#494d64'
     order = 'below'                 # below | above (a click-through ring over the window)
     exclude-apps = []               # bundle IDs whose windows get no border
+    lone-window = true              # false: no border while a window is alone on its Space
 
     [focus-follows-mouse]
     enabled = false

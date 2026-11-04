@@ -310,6 +310,7 @@ fullscreen-width = 0.55
 | `inactive-color` | `'#494d64'` | |
 | `order` | `'below'` | `'above'` draws a click-through ring over the window. |
 | `exclude-apps` | `[]` | Bundle IDs that get no border. |
+| `lone-window` | `true` | `false` hides the border while a window is alone on its display's Space. Every window that could get a border counts, floating ones and those of `exclude-apps` too: app windows and modal dialogs, not sheets or palettes. |
 
 </div>
 
@@ -605,6 +606,7 @@ active-color = '#e1e3e4'        # '#rrggbb' or '#rrggbbaa'
 inactive-color = '#494d64'
 order = 'below'                 # below | above (a click-through ring over the window)
 exclude-apps = []               # bundle IDs whose windows get no border
+lone-window = true              # false: no border while a window is alone on its Space
 
 [focus-follows-mouse]
 enabled = false

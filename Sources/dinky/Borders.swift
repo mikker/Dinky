@@ -8,13 +8,16 @@ import DinkyPrivate
 //
 // The owner feeds it the WindowModel's events through handle(_:). Events only record what needs doing;
 // one flush per run-loop turn does it, in a fixed order: the focus check first, so every border is drawn
-// with the current focus, then the borders of the windows that changed (or all of them).
+// with the current focus, then the borders of the windows that changed (or all of them). Delayed focus checks
+// and finished animations go through the flush too, so no border is placed with a stale set of lone windows.
 final class BorderManager {
     private var config: Borders
     private let model: WindowModel
     private var borders: [UInt32: BorderWindow] = [:]
     private var focusedID: UInt32 = 0
     private var visibleSpaces: Set<UInt64> = []
+    /// With `lone-window = false`, the windows alone on their visible Space, whose borders hide. Empty otherwise.
+    private var loneWindows: Set<UInt32> = []
     /// What the next flush does: check focus, place every border, or place the borders of these windows and move
     /// those of windows that only moved.
     private var pending = (refocus: false, all: false, ids: Set<UInt32>(), moved: Set<UInt32>())
@@ -108,18 +111,28 @@ final class BorderManager {
         guard !refocusScheduled else { return }
         refocusScheduled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20)) { [weak self] in
-            self?.refocusScheduled = false
-            self?.refocus()
+            guard let self else { return }
+            refocusScheduled = false
+            pending.refocus = true
+            scheduleFlush()
         }
     }
 
-    /// Does what the events since the last flush asked for: focus first, then the borders.
+    /// Does what the events since the last flush asked for: focus first, then the borders. A window that became
+    /// alone, or stopped being alone, because another one came, went or changed, is placed again too.
     private func flush() {
         let work = pending
         pending = (refocus: false, all: false, ids: [], moved: [])
         flushScheduled = false
+        let flipped = updateLoneWindows()
         if work.refocus { refocus() }
-        if work.all { syncAll() } else { sync(work.ids); follow(work.moved.subtracting(work.ids)) }
+        if work.all {
+            syncAll()
+        } else {
+            let ids = work.ids.union(flipped)
+            sync(ids)
+            follow(work.moved.subtracting(ids))
+        }
     }
 
     /// Borders of windows that only moved follow them. One that needs more than a move is placed in full.
@@ -131,7 +144,10 @@ final class BorderManager {
     }
 
     /// Windows that finished animating: their borders catch up with any size they skipped.
-    func arrived(_ ids: [UInt32]) { sync(ids) }
+    func arrived(_ ids: [UInt32]) {
+        pending.ids.formUnion(ids)
+        scheduleFlush()
+    }
 
     private func sync<S: Sequence<UInt32>>(_ ids: S) {
         for id in ids { if let window = model.windows[id] { sync(window) } }
@@ -141,6 +157,7 @@ final class BorderManager {
     func missionControlChanged() { syncAll() }
 
     private func syncAll() {
+        updateLoneWindows()
         for id in borders.keys where model.windows[id] == nil { borders[id] = nil }
         for window in model.windows.values { sync(window) }
     }
@@ -151,7 +168,8 @@ final class BorderManager {
             return
         }
         // Minimized windows land here too (they are still documents, just not visible), so the border hides.
-        guard window.isOrderedIn, window.isVisible, !window.isMinimized, visibleSpaces.contains(window.spaceID), !MissionControl.shared.active else {
+        // So does a lone window's with `lone-window = false`, kept for when another window joins it.
+        guard Self.isShown(window, on: visibleSpaces), !loneWindows.contains(window.id), !MissionControl.shared.active else {
             borders[window.id]?.hide()
             return
         }
@@ -170,6 +188,29 @@ final class BorderManager {
         for id in [old, id] {
             if let window = model.windows[id] { sync(window) }
         }
+    }
+
+    /// Recomputes `loneWindows` and returns the windows that joined or left it.
+    @discardableResult
+    private func updateLoneWindows() -> Set<UInt32> {
+        let old = loneWindows
+        loneWindows = config.loneWindow ? [] : Self.loneWindows(in: model.windows.values, visibleSpaces: visibleSpaces)
+        return loneWindows.symmetricDifference(old)
+    }
+
+    /// The document windows alone on their visible Space: each the only one shown there. Every shown document window
+    /// counts, those of apps that get no border too, as the user still sees them.
+    static func loneWindows(in windows: some Collection<Window>, visibleSpaces: Set<UInt64>) -> Set<UInt32> {
+        var shown: [UInt64: [UInt32]] = [:]
+        for window in windows where window.isDocument && isShown(window, on: visibleSpaces) {
+            shown[window.spaceID, default: []].append(window.id)
+        }
+        return Set(shown.values.compactMap { $0.count == 1 ? $0[0] : nil })
+    }
+
+    /// Whether the window is on screen: ordered in, visible, not minimized, on a visible Space.
+    private static func isShown(_ window: Window, on visibleSpaces: Set<UInt64>) -> Bool {
+        window.isOrderedIn && window.isVisible && !window.isMinimized && visibleSpaces.contains(window.spaceID)
     }
 
     // The current Space of every display, full-screen Spaces left out.
