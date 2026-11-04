@@ -333,6 +333,8 @@ public struct Borders: Equatable {
     public var order = BorderOrder.below
     /// Bundle IDs whose windows get no border.
     public var excludeApps: [String] = []
+    /// Whether a window alone on its Space gets a border. Every window that could get one counts, excluded apps' too.
+    public var loneWindow = true
 
     public init() {}
 
@@ -343,6 +345,7 @@ public struct Borders: Equatable {
         inactiveColor = try t.color("inactive-color") ?? inactiveColor
         order = try t.choice("order") ?? order
         excludeApps = try t.strings("exclude-apps") ?? excludeApps
+        loneWindow = try t.bool("lone-window") ?? loneWindow
         try t.done()
     }
 
