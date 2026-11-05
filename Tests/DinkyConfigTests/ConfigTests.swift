@@ -58,6 +58,26 @@ struct ConfigTests {
         #expect(try Config.parse("") == Config())
     }
 
+    @Test func `Warnings record nested paths and source lines`() throws {
+        let config = try Config.parse("[gaps]\ninner = 3\n") { table in
+            try table.table("gaps")?.warn("inner", "use the new key")
+        }
+        #expect(config.warnings == [ConfigWarning(path: "gaps.inner", "use the new key", line: 2)])
+    }
+
+    @Test func `Warnings and errors format suggestions`() {
+        let fix = ConfigFix(replace: "old-key", with: "new-key")
+        #expect(ConfigWarning(path: "gaps.inner", "use the new key", line: 2, fix: fix).description ==
+                "line 2, gaps.inner: use the new key (suggestion: replace 'old-key' with 'new-key')")
+        #expect(ConfigError(path: "gaps.inner", "use the new key", line: 2, fix: fix).description ==
+                "line 2, gaps.inner: use the new key (suggestion: replace 'old-key' with 'new-key')")
+    }
+
+    @Test func `Configs without warnings stay equal to their defaults`() throws {
+        #expect(try Config.parse(Config.defaultTOML).warnings == [])
+        #expect(try Config.parse(Config.defaultTOML) == Config.default)
+    }
+
     @Test func `Top-level keys`() throws {
         let config = try Config.parse("""
         start-at-login = false

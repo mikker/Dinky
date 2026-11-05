@@ -91,7 +91,7 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             hotkeysActive = keys
             print(keys ? "app: key bindings on" : "app: key bindings off, could not create the keyboard event tap (Accessibility?)")
         }
-        let trouble = state.configError != nil || !otherTilers.isEmpty || !hotkeysActive
+        let trouble = state.configError != nil || !state.config.warnings.isEmpty || !otherTilers.isEmpty || !hotkeysActive
         guard let button = statusItem.button else { return }
         let title = (workspace.map { "\($0)" } ?? "?") + (trouble ? "!" : "")
         let disabled = !state.enabled
@@ -118,6 +118,9 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if let error = state.configError {
             menu.addItem(withTitle: "Config error: \(error)", action: nil, keyEquivalent: "")
+        }
+        for warning in state.config.warnings {
+            menu.addItem(withTitle: "Config warning: \(warning)", action: nil, keyEquivalent: "")
         }
         if !otherTilers.isEmpty {
             menu.addItem(withTitle: otherTilersWarning(otherTilers), action: nil, keyEquivalent: "")
