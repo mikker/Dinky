@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import DinkyConfig
+@testable import DinkyConfig
 import TOMLDecoder
 @testable import DinkyCommands
 
@@ -195,6 +195,62 @@ struct SchemaTests {
         try covers(TOMLTable(source: Self.everyKey), Self.schema, at: "")
     }
 
+    /// Old key names still load (KeyChanges), so the schema lists them too, or editors would flag them as unknown.
+    /// Taplo has no `deprecated` keyword: each is marked by a description starting "Deprecated:" and hidden from
+    /// completion, and a renamed one accepts what its new name accepts.
+    @Test func `Schema deprecations match the key changes`() throws {
+        var listed: Set<String> = []
+        for change in KeyChanges.shipped.keys {
+            let path = change.table.isEmpty ? change.old : "\(change.table).\(change.old)"
+            listed.insert(path)
+            let table = try #require(node(at: change.table), "\(change.table) is not in the schema")
+            let properties = try #require(object(table)["properties"] as? [String: [String: Any]])
+            let old = try #require(properties[change.old], "\(path) is not in the schema")
+            let description = old["description"] as? String ?? ""
+            #expect((old["x-taplo"] as? [String: Any])?["hidden"] as? Bool == true, "\(path) is offered in completion")
+            if let new = change.new {
+                #expect(description.hasPrefix("Deprecated: renamed to \(new) in \(change.version)."), "\(path): \(description)")
+                var renamed = old, current = try #require(properties[new])
+                for key in ["description", "x-taplo"] { renamed[key] = nil; current[key] = nil }
+                #expect(NSDictionary(dictionary: renamed) == NSDictionary(dictionary: current), "\(path) accepts other values than \(new)")
+            } else {
+                #expect(description.hasPrefix("Deprecated: removed in \(change.version)."), "\(path): \(description)")
+            }
+        }
+        for change in KeyChanges.shipped.values {
+            let table = try #require(node(at: change.table), "\(change.table) is not in the schema")
+            let choice = try #require((object(table)["properties"] as? [String: [String: Any]])?[change.key])
+            let choices = resolve(choice)["enum"] as? [String] ?? []
+            #expect(choices.contains(change.old), "\(change.table).\(change.key) does not accept the old value \(change.old)")
+        }
+        #expect(Set(deprecatedKeys(Self.schema, at: "")) == listed, "a key marked deprecated in the schema is not in KeyChanges")
+    }
+
+    /// The schema of the table at a dotted path such as `master` or `rules`, through arrays of tables.
+    private func node(at path: String) -> [String: Any]? {
+        var schema: [String: Any] = Self.schema
+        for part in path.split(separator: ".").map(String.init) where !path.isEmpty {
+            guard let child = (object(schema)["properties"] as? [String: [String: Any]])?[part] else { return nil }
+            schema = (object(child)["items"] as? [String: Any]) ?? child
+        }
+        return schema
+    }
+
+    /// Dotted paths of every property whose description starts "Deprecated:".
+    private func deprecatedKeys(_ schema: [String: Any], at path: String) -> [String] {
+        let properties = object(schema)["properties"] as? [String: [String: Any]] ?? [:]
+        return properties.flatMap { key, child -> [String] in
+            let here = path.isEmpty ? key : "\(path).\(key)"
+            let mine = isDeprecated(child) ? [here] : []
+            let nested = (object(child)["items"] as? [String: Any]) ?? child
+            return mine + deprecatedKeys(nested, at: here)
+        }
+    }
+
+    private func isDeprecated(_ schema: [String: Any]) -> Bool {
+        (schema["description"] as? String)?.hasPrefix("Deprecated:") == true
+    }
+
     /// Every key in `table` is in the schema, at the same path.
     private func check(_ table: TOMLTable, _ schema: [String: Any], at path: String) {
         let schema = object(schema)
@@ -212,7 +268,8 @@ struct SchemaTests {
     /// Every key in the schema is in `table`, at the same path, and every open-ended table has an entry.
     private func covers(_ table: TOMLTable, _ schema: [String: Any], at path: String) {
         let schema = object(schema)
-        for (key, child) in schema["properties"] as? [String: [String: Any]] ?? [:] {
+        // Deprecated keys are not written in the fixture: the config would warn about them.
+        for (key, child) in schema["properties"] as? [String: [String: Any]] ?? [:] where !isDeprecated(child) {
             let here = path.isEmpty ? key : "\(path).\(key)"
             guard table.contains(key: key) else {
                 Issue.record("\(here) is in the schema but not the fixture")

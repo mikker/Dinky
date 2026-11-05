@@ -18,7 +18,8 @@ file is left alone, with the read error shown in the menu.
 - `dinky doctor [--config <path>]` also checks commands, modes and key names.
 - Renamed keys keep working under their old name, with a warning naming the new
   key in `dinky doctor` and the menu. For example, `[master] orientation` was
-  renamed to `side` in 0.23.
+  renamed to `side` in 0.23. The schema lists old names as deprecated, so
+  editors don't mark them as unknown and don't offer them in completion.
 - When warnings or an error are present, dinky also opens a small config issues
   window. Apply applies its suggested one-line edits and saves `dinky.toml.bak`
   before changing the config; rows without a suggestion link to this reference.

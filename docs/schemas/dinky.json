@@ -123,6 +123,13 @@
           "enum": ["left", "right", "center"],
           "default": "left",
           "description": "The side the master takes; the stack goes on the other. center puts the master in the middle with a stack on each side once two windows are stacked. Hyprland calls it orientation."
+        },
+        "orientation": {
+          "type": "string",
+          "enum": ["left", "right", "center"],
+          "default": "left",
+          "description": "Deprecated: renamed to side in 0.23. Still read, with a warning; side wins when both are set.",
+          "x-taplo": { "hidden": true }
         }
       }
     },
