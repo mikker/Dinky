@@ -79,12 +79,13 @@ public struct Config: Equatable {
     }
 
     public static func parse(_ toml: String) throws(ConfigError) -> Config {
-        try parse(toml) { _ in }
+        try parse(toml, changes: .shipped) { _ in }
     }
 
     /// `parse` with `configure` run on the root table after the config is built, so tests can record
     /// warnings without a real producer.
-    static func parse(_ toml: String, configure: (Table) throws -> Void) throws(ConfigError) -> Config {
+    static func parse(_ toml: String, changes: KeyChanges = .shipped,
+                      configure: (Table) throws -> Void) throws(ConfigError) -> Config {
         let root: TOMLTable
         do {
             root = try TOMLTable(source: toml)
@@ -93,7 +94,7 @@ public struct Config: Equatable {
             throw ConfigError("\(error)")
         }
         do {
-            let table = Table(root)
+            let table = Table(root, changes: changes)
             var config = try Config(table)
             try configure(table)
             config.warnings = table.warningSink.warnings.map { warning in

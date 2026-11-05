@@ -65,6 +65,53 @@ struct ConfigTests {
         #expect(config.warnings == [ConfigWarning(path: "gaps.inner", "use the new key", line: 2)])
     }
 
+    @Test func `Renamed keys keep loading`() throws {
+        let old = try Config.parse("[master]\norientation = 'right'\n")
+        #expect(old.master.side == .right)
+        #expect(old.warnings == [ConfigWarning(
+            path: "master.orientation",
+            "renamed to 'side' in 0.23; the old name still works",
+            line: 2,
+            fix: ConfigFix(replace: "orientation", with: "side")
+        )])
+
+        let both = try Config.parse("[master]\norientation = 'left'\nside = 'right'\n")
+        #expect(both.master.side == .right)
+        #expect(both.warnings == [ConfigWarning(
+            path: "master.orientation",
+            "ignored: 'side' is set (renamed from 'orientation' in 0.23)",
+            line: 2
+        )])
+    }
+
+    @Test func `Custom key changes cover removed keys, array tables and values`() throws {
+        let changes = KeyChanges(
+            keys: [
+                KeyChange(table: "", old: "obsolete", new: nil, version: "1.2"),
+                KeyChange(table: "rules", old: "application", new: "app-id", version: "1.3")
+            ],
+            values: [ValueChange(table: "master", key: "side", old: "west", new: "left", version: "1.4")]
+        )
+        let config = try Config.parse("""
+        obsolete = true
+        [master]
+        side = 'west'
+        [[rules]]
+        application = 'com.example.App'
+        run = 'layout floating'
+        """, changes: changes) { _ in }
+
+        #expect(config.rules[0].appId == "com.example.App")
+        #expect(config.master.side == .left)
+        #expect(config.warnings == [
+            ConfigWarning(path: "master.side", "'west' was renamed to 'left' in 1.4", line: 3,
+                          fix: ConfigFix(replace: "west", with: "left")),
+            ConfigWarning(path: "rules[0].application", "renamed to 'app-id' in 1.3; the old name still works",
+                          line: 5, fix: ConfigFix(replace: "application", with: "app-id")),
+            ConfigWarning(path: "obsolete", "removed in 1.2; ignored", line: 1)
+        ])
+    }
+
     @Test func `Warnings and errors format suggestions`() {
         let fix = ConfigFix(replace: "old-key", with: "new-key")
         #expect(ConfigWarning(path: "gaps.inner", "use the new key", line: 2, fix: fix).description ==
