@@ -117,14 +117,32 @@ public struct Config: Equatable {
         workspaces = try t.int("workspaces") ?? workspaces
         guard workspaces >= 1 else { throw ConfigError(path: "workspaces", "must be at least 1") }
         if let assignments = try t.table("workspace-to-display") {
+            // `01` and `+1` name workspace 1 too: they load as 1 with a warning. When several keys name one
+            // workspace, the first in the file wins and the rest are ignored.
+            var winningKeys: [Int: String] = [:]
+            var keyCounts: [Int: Int] = [:]
             for key in assignments.keys {
-                // As for [workspace]: only the plain number, so `01` and `+1` can't both name workspace 1.
-                guard let n = Int(key), String(n) == key, (1...workspaces).contains(n) else {
+                guard let n = Int(key), (1...workspaces).contains(n) else {
                     throw ConfigError(path: assignments.path(key), "'\(key)' is not a workspace number from 1 to \(workspaces)")
                 }
+                if winningKeys[n] == nil { winningKeys[n] = key }
+                keyCounts[n, default: 0] += 1
+            }
+            for key in assignments.keys {
+                let n = Int(key)!
                 let patterns = try assignments.stringOrStrings(key)!
                 guard !patterns.isEmpty, !patterns.contains("") else {
                     throw ConfigError(path: assignments.path(key), "a display pattern can't be empty")
+                }
+                guard winningKeys[n] == key else {
+                    assignments.warn(key, "ignored: workspace \(n) is already set by '\(winningKeys[n]!)'")
+                    continue
+                }
+                // While another key names the same workspace, renaming could repeat a key, which TOML rejects, so
+                // the fix waits until the ignored key is gone.
+                if String(n) != key {
+                    let fix = keyCounts[n] == 1 ? ConfigFix(replace: key, with: String(n)) : nil
+                    assignments.warn(key, "'\(key)' is workspace \(n); write it as '\(n)'", fix: fix)
                 }
                 workspaceDisplays[n] = patterns.map(MonitorPattern.init)
             }
@@ -295,7 +313,10 @@ public struct Accordion: Equatable {
 
     init(_ t: Table) throws {
         padding = try t.int("padding") ?? padding
-        guard padding >= 0 else { throw ConfigError(path: t.path("padding"), "must be 0 or more") }
+        if padding < 0 {
+            t.warn("padding", "must be 0 or more; using 0", fix: ConfigFix(replace: String(padding), with: "0"))
+            padding = 0
+        }
         orientation = try t.choice("orientation") ?? orientation
         try t.done()
     }
@@ -358,8 +379,18 @@ public struct Borders: Equatable {
     init(_ t: Table) throws {
         enabled = try t.bool("enabled") ?? enabled
         width = try t.double("width") ?? width
-        // TOML has inf and nan; neither is a width.
-        guard width.isFinite, width >= 0 else { throw ConfigError(path: t.path("width"), "must be a finite number, 0 or more") }
+        if !width.isFinite {
+            let defaultWidth = Borders().width
+            let token = width.isNaN ? "nan" : "inf"
+            let replacement = width.sign == .minus ? "-\(token)" : token
+            width = defaultWidth
+            t.warn("width", "must be a finite number, 0 or more; using the default, \(configNumber(defaultWidth))",
+                   fix: ConfigFix(replace: replacement, with: configNumber(defaultWidth)))
+        } else if width < 0 {
+            let replacement = configNumber(width)
+            width = 0
+            t.warn("width", "must be 0 or more; using 0", fix: ConfigFix(replace: replacement, with: "0"))
+        }
         activeColor = try t.color("active-color") ?? activeColor
         inactiveColor = try t.color("inactive-color") ?? inactiveColor
         order = try t.choice("order") ?? order
@@ -371,6 +402,12 @@ public struct Borders: Equatable {
     public func decorates(bundleID: String?) -> Bool {
         !(bundleID.map(excludeApps.contains) ?? false)
     }
+}
+
+/// A number as a config would write it: `-2` rather than `-2.0`, so a fix's text also matches `-2` in the file.
+private func configNumber(_ value: Double) -> String {
+    if let integer = Int(exactly: value) { return String(integer) }
+    return String(value)
 }
 
 /// `follow-app-activation = true`, or a table for apps not to follow.
