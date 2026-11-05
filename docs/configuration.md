@@ -18,7 +18,8 @@ file is left alone, with the read error shown in the menu.
 - `dinky doctor [--config <path>]` also checks commands, modes and key names.
 - Renamed keys keep working under their old name, with a warning naming the new
   key in `dinky doctor` and the menu. For example, `[master] orientation` was
-  renamed to `side` in 0.23.
+  renamed to `side` in 0.23. The schema lists old names as deprecated, so
+  editors don't mark them as unknown and don't offer them in completion.
 - The [JSON Schema](schemas/dinky.json) gives completion in editors that read
   Taplo's `#:schema` line, such as Zed or VS Code with Even Better TOML.
 
