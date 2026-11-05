@@ -46,6 +46,8 @@ public struct Config: Equatable {
     public var rules: [WindowRule] = []
     /// Keyed by mode name, e.g. `main`, `service`.
     public var modes: [String: Mode] = [:]
+    /// Non-fatal config problems found while parsing.
+    public var warnings: [ConfigWarning] = []
 
     public init() {}
 
@@ -77,6 +79,12 @@ public struct Config: Equatable {
     }
 
     public static func parse(_ toml: String) throws(ConfigError) -> Config {
+        try parse(toml) { _ in }
+    }
+
+    /// `parse` with `configure` run on the root table after the config is built, so tests can record
+    /// warnings without a real producer.
+    static func parse(_ toml: String, configure: (Table) throws -> Void) throws(ConfigError) -> Config {
         let root: TOMLTable
         do {
             root = try TOMLTable(source: toml)
@@ -85,7 +93,15 @@ public struct Config: Equatable {
             throw ConfigError("\(error)")
         }
         do {
-            return try Config(Table(root))
+            let table = Table(root)
+            var config = try Config(table)
+            try configure(table)
+            config.warnings = table.warningSink.warnings.map { warning in
+                var warning = warning
+                warning.line = warning.line ?? lineNumber(of: warning.path, in: toml)
+                return warning
+            }
+            return config
         } catch let error as ConfigError {
             var error = error
             error.line = error.line ?? lineNumber(of: error.path, in: toml)

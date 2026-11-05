@@ -1,6 +1,11 @@
 import Foundation
 import TOMLDecoder
 
+/// The warnings of one parse, shared by the root table and every table nested in it.
+final class ConfigWarningSink {
+    var warnings: [ConfigWarning] = []
+}
+
 /// A TOML table read strictly: every key read is remembered and `done()` rejects the rest, so a
 /// typo like `gap` is an error instead of being ignored. Each read returns nil when the key is
 /// absent and throws a `ConfigError` naming the key path when the value has the wrong type.
@@ -10,16 +15,29 @@ import TOMLDecoder
 final class Table {
     let path: String
     private let table: TOMLTable
+    let warningSink: ConfigWarningSink
     private var used: Set<String> = []
 
     init(_ table: TOMLTable, path: String = "") {
         self.table = table
         self.path = path
+        warningSink = ConfigWarningSink()
+    }
+
+    private init(_ table: TOMLTable, path: String, warningSink: ConfigWarningSink) {
+        self.table = table
+        self.path = path
+        self.warningSink = warningSink
     }
 
     var keys: [String] { table.keys }
 
     func path(_ key: String) -> String { path.isEmpty ? key : "\(path).\(key)" }
+
+    /// Records a warning at `key`; `parse` fills in its line.
+    func warn(_ key: String, _ message: String, fix: ConfigFix? = nil) {
+        warningSink.warnings.append(ConfigWarning(path: path(key), message, fix: fix))
+    }
 
     func bool(_ key: String) throws -> Bool? { try scalar(key, "true or false") { try $0.bool(forKey: key) } }
     func int(_ key: String) throws -> Int? { try scalar(key, "an integer") { Int(try $0.integer(forKey: key)) } }
@@ -69,7 +87,7 @@ final class Table {
     func table(_ key: String) throws -> Table? {
         guard use(key) else { return nil }
         guard let nested = try? table.table(forKey: key) else { throw ConfigError(path: path(key), "expected a table") }
-        return Table(nested, path: path(key))
+        return Table(nested, path: path(key), warningSink: warningSink)
     }
 
     /// An array of tables, as written with `[[key]]`.
@@ -79,7 +97,7 @@ final class Table {
         return try (0..<array.count).map { index in
             let path = "\(path(key))[\(index)]"
             guard let nested = try? array.table(atIndex: index) else { throw ConfigError(path: path, "expected a table") }
-            return Table(nested, path: path)
+            return Table(nested, path: path, warningSink: warningSink)
         }
     }
 

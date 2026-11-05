@@ -9,11 +9,10 @@ public struct ConfigFinding: Equatable, CustomStringConvertible {
     public var description: String { "\(level.rawValue): \(message)" }
 }
 
-/// Checks a parsed config beyond what parsing guarantees: every binding and rule command is in the
-/// vocabulary, every `mode X` names a mode, there is a main mode, and no
-/// `[workspace.N]` table is past the last workspace. Key names are checked at parse time.
+/// Checks a parsed config beyond what parsing guarantees: parser warnings, every binding and rule command in the
+/// vocabulary, every `mode X` names a mode, a main mode, and no `[workspace.N]` table past the last workspace.
 public func checkConfig(_ config: Config) -> [ConfigFinding] {
-    var findings: [ConfigFinding] = []
+    var findings = config.warnings.map { ConfigFinding(level: .warning, message: $0.description) }
     func check(_ commands: [String], at place: String) {
         for text in commands {
             do {
