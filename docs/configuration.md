@@ -20,6 +20,9 @@ file is left alone, with the read error shown in the menu.
   key in `dinky doctor` and the menu. For example, `[master] orientation` was
   renamed to `side` in 0.23. The schema lists old names as deprecated, so
   editors don't mark them as unknown and don't offer them in completion.
+- When warnings or an error are present, dinky also opens a small config issues
+  window. Apply applies its suggested one-line edits and saves `dinky.toml.bak`
+  before changing the config; rows without a suggestion link to this reference.
 - The [JSON Schema](schemas/dinky.json) gives completion in editors that read
   Taplo's `#:schema` line, such as Zed or VS Code with Even Better TOML.
 
