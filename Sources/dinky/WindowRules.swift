@@ -10,24 +10,34 @@ extension Coordinator {
     /// could not move it anyway).
     func classify(_ window: Window) -> (floating: Bool, runsRules: Bool)? {
         guard let element = axWindow(pid: window.pid, wid: window.id, timeout: FrameApplier.timeout) else {
-            let tries = attempts[window.id, default: 0] + 1
-            attempts[window.id] = tries
-            guard tries < 5 else { return (true, false) }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                guard let self, let window = model.windows[window.id] else { return }
-                track(window)
-                flush()
-            }
-            return nil
+            return retryClassification(window.id) ? nil : (true, false)
         }
-        attempts[window.id] = nil
         let kind = windowKind(subrole: axString(element, kAXSubroleAttribute))
         var resizable: DarwinBoolean = false
         AXUIElementIsAttributeSettable(element, kAXSizeAttribute as CFString, &resizable)
         let title = axString(element, kAXTitleAttribute) ?? ""
         let identifier = axString(element, "AXIdentifier").flatMap { $0.isEmpty ? nil : $0 }
+        // Finder can expose a browsing window before its subrole and resize capability settle.
+        // Use the same bounded retry as a missing AX window before committing a floating placement.
+        if window.bundleID == "com.apple.finder", identifier == "FinderWindow",
+           (kind != .normal || !resizable.boolValue), retryClassification(window.id) {
+            return nil
+        }
+        attempts[window.id] = nil
         return classify(window, kind: kind, resizable: resizable.boolValue, title: title, identifier: identifier,
                         lacksFullscreen: lacksFullscreen(element, bundleID: window.bundleID))
+    }
+
+    private func retryClassification(_ id: UInt32) -> Bool {
+        let tries = attempts[id, default: 0] + 1
+        attempts[id] = tries
+        guard tries < 5 else { return false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self, let window = model.windows[id] else { return }
+            track(window)
+            flush()
+        }
+        return true
     }
 
     /// Applies the AX facts read above. Keep command scheduling separate from execution: a window must be

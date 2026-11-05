@@ -29,4 +29,7 @@ Learn more:
 Window rules can match or exclude Accessibility identifiers to distinguish auxiliary
 windows from documents with the same title. See [window rules](https://dinky.rodeo/configuration/#rules).
 
+Finder browsing windows can take a moment to report that they are resizable.
+Dinky briefly retries classification before leaving those windows floating.
+
 MIT licensed.
