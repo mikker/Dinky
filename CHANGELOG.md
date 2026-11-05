@@ -27,6 +27,7 @@
 ### Configuration
 
 - The config can now report warnings, shown by `dinky doctor` and in the menu, with a suggested fix where there is one.
+- A config issues window lists warnings and errors, applies its suggestions, and keeps a backup before editing.
 - A config using a renamed key loads again with a warning naming the new key; for example, `[master] orientation`, renamed to `side` in 0.23, no longer makes the config fail to load.
 
 ### Fixes

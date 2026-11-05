@@ -123,6 +123,8 @@ final class AppState {
         }
         // The new hotkeys and a reload while disabled stay disabled.
         propagateEnabled()
+        // A failed load keeps the previous config, whose warnings describe a file that is no longer there.
+        ConfigIssuesWindow.shared.update(error: configError, warnings: configError == nil ? config.warnings : [])
     }
 
     /// Hands `enabled` to the parts that keep their own copy. The activation follower and hover focus read it

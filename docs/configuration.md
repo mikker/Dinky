@@ -19,6 +19,9 @@ file is left alone, with the read error shown in the menu.
 - Renamed keys keep working under their old name, with a warning naming the new
   key in `dinky doctor` and the menu. For example, `[master] orientation` was
   renamed to `side` in 0.23.
+- When warnings or an error are present, dinky also opens a small config issues
+  window. Apply applies its suggested one-line edits and saves `dinky.toml.bak`
+  before changing the config; rows without a suggestion link to this reference.
 - The [JSON Schema](schemas/dinky.json) gives completion in editors that read
   Taplo's `#:schema` line, such as Zed or VS Code with Even Better TOML.
 
