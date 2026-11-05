@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Key bindings
+
+- A binding can be a table, `{ command = '...', exclude-apps = ['<bundle id>'] }`. In an excluded app dinky leaves the key to the app, so terminals with their own `ctrl-hjkl` pane navigation keep it.
+
 ## 0.24
 
 **Upgrading scripts:** Raw socket clients must close their writing half after sending a request; a newline no longer submits it. The normal CLI and macOS `nc` already do this. The CLI now rejects replies over 1 MiB: narrow large list queries with filters or `--format`, or use a raw socket client for larger replies.

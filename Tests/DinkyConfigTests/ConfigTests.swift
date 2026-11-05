@@ -363,6 +363,9 @@ struct ConfigTests {
         [mode.main]
         alt-a = 'workspace 1'
         alt-b = ['layout floating', 'mode main']
+        ctrl-h = { command = 'focus left --wrap-around', exclude-apps = ['com.github.wez.wezterm', 'com.mitchellh.ghostty'] }
+        ctrl-j = { command = ['focus down', 'retile'] }
+        ctrl-k = { command = 'focus up' }
 
         [mode.resize]
         minus = 'resize smart -50'
@@ -370,7 +373,24 @@ struct ConfigTests {
         let bindings = config.modes["main"]!.bindings
         #expect(bindings[KeyCombo(modifiers: .alt, key: "a")] == ["workspace 1"])
         #expect(bindings[KeyCombo(modifiers: .alt, key: "b")] == ["layout floating", "mode main"])
+        #expect(bindings[KeyCombo(modifiers: .ctrl, key: "h")] == ["focus left --wrap-around"])
+        #expect(config.modes["main"]!.excludedApps[KeyCombo(modifiers: .ctrl, key: "h")] == ["com.github.wez.wezterm", "com.mitchellh.ghostty"])
+        #expect(config.modes["main"]!.bindings[KeyCombo(modifiers: .ctrl, key: "j")] == ["focus down", "retile"])
+        #expect(config.modes["main"]!.excludedApps[KeyCombo(modifiers: .ctrl, key: "j")] == nil)
+        #expect(config.modes["main"]!.bindings[KeyCombo(modifiers: .ctrl, key: "k")] == ["focus up"])
         #expect(config.modes["resize"]!.bindings[KeyCombo(key: "minus")] == ["resize smart -50"])
+    }
+
+    @Test func `Binding exclusions`() throws {
+        let mode = try Config.parse("""
+        [mode.main]
+        ctrl-h = { command = 'focus left', exclude-apps = ['com.example.Terminal'] }
+        """).modes["main"]!
+        let combo = KeyCombo(modifiers: .ctrl, key: "h")
+        #expect(mode.commands(for: combo, frontApp: "com.example.Terminal") == nil)
+        #expect(mode.commands(for: combo, frontApp: "com.apple.TextEdit") == ["focus left"])
+        #expect(mode.commands(for: combo, frontApp: nil) == ["focus left"])
+        #expect(mode.commands(for: KeyCombo(key: "a"), frontApp: nil) == nil)
     }
 
     @Test func `Bad binding values fail`() {
@@ -378,6 +398,10 @@ struct ConfigTests {
         assertError("[mode.main]\nalt-a = []\n", path: "mode.main.alt-a", line: 2, contains: "can't be empty")
         assertError("[mode.main]\nalt-a = 3\n", path: "mode.main.alt-a", line: 2, contains: "command string")
         assertError("[mode.main]\nalt-a = ['x', 3]\n", path: "mode.main.alt-a", line: 2, contains: "command string")
+        assertError("[mode.main]\nalt-a = { exclude-apps = ['com.example.App'] }\n", path: "mode.main.alt-a.command", line: 2, contains: "missing, a binding table needs 'command'")
+        assertError("[mode.main]\nalt-a = { command = 'x', ignored = true }\n", path: "mode.main.alt-a.ignored", line: 2, contains: "unknown key")
+        assertError("[mode.main]\nalt-a = { command = 'x', exclude-apps = 'com.example.App' }\n", path: "mode.main.alt-a.exclude-apps", line: 2, contains: "list of strings")
+        assertError("[mode.main]\nalt-a = { command = '' }\n", path: "mode.main.alt-a.command", line: 2, contains: "can't be empty")
         assertError("[mode.main]\nalt-super-a = 'x'\n", path: "mode.main.alt-super-a", line: 2, contains: "'alt-super-a'")
         assertError("[mode.main]\nalt-shift-a = 'x'\nshift-alt-a = 'y'\n", path: "mode.main.shift-alt-a", line: 3, contains: "bound twice")
         assertError("[mode.main]\nhyper-a = 'x'\nctrl-alt-cmd-shift-a = 'y'\n", path: "mode.main.ctrl-alt-cmd-shift-a", line: 3, contains: "bound twice")

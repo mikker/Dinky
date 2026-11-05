@@ -171,6 +171,7 @@ struct SchemaTests {
         [mode.main]
         alt-1 = 'workspace 1'
         alt-r = 'mode resize'
+        ctrl-h = { command = ['focus left', 'retile'], exclude-apps = ['com.github.wez.wezterm'] }
 
         [mode.resize]
         esc = ['mode main']
