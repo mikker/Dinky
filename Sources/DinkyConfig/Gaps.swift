@@ -71,7 +71,10 @@ public struct GapsPatch: Equatable {
     /// A gap in points, which can't be negative.
     private static func points(_ t: Table, _ key: String) throws -> Int? {
         guard let value = try t.int(key) else { return nil }
-        guard value >= 0 else { throw ConfigError(path: t.path(key), "must be 0 or more") }
+        if value < 0 {
+            t.warn(key, "must be 0 or more; using 0", fix: ConfigFix(replace: String(value), with: "0"))
+            return 0
+        }
         return value
     }
 }
