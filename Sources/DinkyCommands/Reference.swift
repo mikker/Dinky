@@ -17,8 +17,8 @@ extension Command {
                 + "prev and next step through the focused display's workspaces."),
         Doc(syntax: "workspace-back-and-forth",
             description: "Switch to the workspace that was focused before the current one."),
-        Doc(syntax: "move-window-to-workspace <number|prev|next> [--follow]",
-            description: "Move the focused window to a workspace. With --follow, switch there too."),
+        Doc(syntax: "move-window-to-workspace <number|prev|next> [--follow] [--window-id <id>]",
+            description: "Move a window to a workspace. --window-id selects a window by ID; otherwise use the focused window. With --follow, switch there too."),
         Doc(syntax: "move-window-to-display <next|prev> [--follow]",
             description: "Move the focused window to the next or previous display's current workspace. With --follow, focus it there."),
         Doc(syntax: "focus <left|down|up|right> [--boundaries workspace|all-monitors-outer-frame] "

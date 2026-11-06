@@ -20,6 +20,9 @@ Open dinky and grant Accessibility when asked. Windows tile as they open.
 - `dinky layout accordion`: Stack the focused container.
 - `dinky doctor`: Check the config, the macOS settings dinky needs, and that no other tiler is running.
 
+Scripts can move a window without focusing it first. Find its ID with
+`dinky list-windows --all`, then run `dinky move-window-to-workspace 3 --window-id 12345`.
+
 Learn more:
 
 - [Concepts](https://dinky.rodeo/concepts/) and [Layouts](https://dinky.rodeo/layouts/)

@@ -6,7 +6,7 @@ import DinkyLayout
 public enum Command: Equatable, Sendable {
     case workspace(WorkspaceTarget)
     case workspaceBackAndForth
-    case moveWindowToWorkspace(WorkspaceTarget, follow: Bool)
+    case moveWindowToWorkspace(WorkspaceTarget, follow: Bool, windowID: UInt32? = nil)
     case moveWindowToDisplay(DisplayTarget, follow: Bool)
     /// Focus the neighbour in a direction. `boundaries` says where the search stops, `action` what happens there.
     case focus(Direction, boundaries: FocusBoundaries = .workspace, action: BoundariesAction = .stop)

@@ -16,7 +16,7 @@ prints it.
 |---|---|
 | `workspace <n\|prev\|next>` | Show a workspace and focus its display. `prev`/`next` step through the focused display's and don't wrap. |
 | `workspace-back-and-forth` | Switch to the previous workspace. |
-| `move-window-to-workspace <n\|prev\|next> [--follow]` | Move the focused window, and with `--follow` go too. |
+| `move-window-to-workspace <n\|prev\|next> [--follow] [--window-id <id>]` | Move the focused window or the window with the given ID. With `--follow`, switch to the destination. |
 | `move-window-to-display <next\|prev> [--follow]` | Move the focused window to another display's workspace. |
 | `focus <left\|down\|up\|right> [--boundaries <b>] [--boundaries-action <a>]` | Focus the nearest window. `--boundaries` is `workspace` (default) or `all-monitors-outer-frame`, which continues onto the next display. `--boundaries-action` is `stop` (default), `fail`, `wrap-around-the-workspace` (`--wrap-around`) or `wrap-around-all-monitors`, which needs `all-monitors-outer-frame`. |
 | `focus-monitor <left\|down\|up\|right\|next\|prev\|n>` | Focus a display. |

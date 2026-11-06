@@ -20,6 +20,17 @@ struct ParseTests {
         #expect(try parse("move-window-to-workspace prev") == .moveWindowToWorkspace(.prev, follow: false))
     }
 
+    @Test func `Move a specific window to a workspace`() throws {
+        #expect(try parse("move-window-to-workspace 3 --window-id 12345") ==
+                .moveWindowToWorkspace(.number(3), follow: false, windowID: 12345))
+        #expect(try parse("move-window-to-workspace --window-id 12345 --follow next") ==
+                .moveWindowToWorkspace(.next, follow: true, windowID: 12345))
+        for args in ["3 --window-id", "3 --window-id 0", "3 --window-id -1", "3 --window-id abc",
+                     "3 --window-id 4294967296", "3 --window-id 1 --window-id 2"] {
+            #expect(throws: CommandError.self) { try parse("move-window-to-workspace \(args)") }
+        }
+    }
+
     @Test func `Move window to display`() throws {
         #expect(try parse("move-window-to-display next") == .moveWindowToDisplay(.next, follow: false))
         #expect(try parse("move-window-to-display prev --follow") == .moveWindowToDisplay(.prev, follow: true))

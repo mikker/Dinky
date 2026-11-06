@@ -46,9 +46,15 @@ extension Command {
         case "workspace-back-and-forth":
             return none ? .workspaceBackAndForth : nil
         case "move-window-to-workspace":
-            let (rest, follow) = followFlag(args)
+            var (rest, follow) = followFlag(args)
+            var windowID: UInt32?
+            if let index = rest.firstIndex(of: "--window-id") {
+                guard rest.indices.contains(index + 1), let id = UInt32(rest[index + 1]), id > 0 else { return nil }
+                windowID = id
+                rest.removeSubrange(index...index + 1)
+            }
             guard rest.count == 1, let target = workspaceTarget(rest[0]) else { return nil }
-            return .moveWindowToWorkspace(target, follow: follow)
+            return .moveWindowToWorkspace(target, follow: follow, windowID: windowID)
         case "move-window-to-display":
             let (rest, follow) = followFlag(args)
             guard rest.count == 1, let target = DisplayTarget(rawValue: rest[0]) else { return nil }
