@@ -83,7 +83,9 @@ layout = 'accordion'
 One window has focus, and its border says so. `focus left` and friends move it
 to the nearest window that way; with `--boundaries all-monitors-outer-frame`,
 across the display edge too. [`[focus-follows-mouse]`](configuration.md#focus-follows-mouse)
-moves it with the pointer instead.
+moves it with the pointer instead. When the focused window closes or is minimized
+and macOS leaves its Space without keyboard focus, focus goes to the window there
+that had it last.
 
 ## Rule
 

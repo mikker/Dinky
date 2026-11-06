@@ -70,6 +70,14 @@ final class Coordinator {
     private(set) var displayBeforeFocus: String?
     /// A window dinky just focused, and until when focus reads that disagree are taken as stale.
     private var focusing: (id: WindowID, until: Date)?
+    /// When windows lost focus, to tell one that leaves its Space with focus from one the user had left already.
+    private var focusLosses = FocusLosses()
+    /// Windows that had focus, most recent first, so focus can go back to the last one when the focused one leaves.
+    private var focusHistory: [WindowID] = []
+    /// Windows last seen minimized, so only the moment a window is minimized counts as it leaving its Space.
+    private var minimizedIDs: Set<WindowID> = []
+    /// The check that focuses another window after the focused one closed or was minimized. See `scheduleRefocus`.
+    private var refocusCheck: DispatchWorkItem?
     /// Trees to place without gliding the next time they are applied: after displays come or go, apps have
     /// moved the windows of Spaces that were not on screen to frames of their own, and a glide from there
     /// would only show the mess.
@@ -151,7 +159,9 @@ final class Coordinator {
         }
         borders?.handle(event)
         if let window = event.window {
+            let left = spaceLeft(by: window, removed: event.change == .removed)
             event.change == .removed ? forget(window.id) : track(window)
+            if let left { scheduleRefocus(on: left, leaving: window.id) }
             if [.windowMove, .windowResize].contains(event.kind) {
                 noteFrameChange(of: window.id)
                 recoverFrame(of: window.id)
@@ -384,6 +394,8 @@ final class Coordinator {
         frameRecovery[id] = nil
         heldTabs[id] = nil
         notTabs.remove(id)
+        focusHistory.removeAll { $0 == id }
+        focusLosses.forget(id)
         guard let placement = placements.removeValue(forKey: id), let space = placement.space,
               !takeOverTile(of: id, in: space) else { return }
         edit(space) { $0.remove(id) }
@@ -406,7 +418,13 @@ final class Coordinator {
         if id != lastFocused {
             // Before the override goes: a new window can take focus before it shows. See Adoption.swift.
             displayBeforeFocus = displays.focusedDisplay(window: lastFocused)?.uuid
+            focusLosses.lost(lastFocused, at: FocusLosses.now)
             lastFocused = id
+            if id != 0 {
+                focusHistory.removeAll { $0 == id }
+                focusHistory.insert(id, at: 0)
+                if focusHistory.count > 64 { focusHistory.removeLast() }
+            }
             // Only a window takes focus from a display focused without one, not an app with no window here.
             if id != 0 { displays.focusOverride = nil }
             onFocusChange?()
@@ -415,6 +433,62 @@ final class Coordinator {
         focusing = nil
         guard let key = placements[id]?.space, workspaces[key]?.focused != id else { return }
         edit(key) { $0.focus(id) }
+    }
+
+    // MARK: Focus after a window leaves
+
+    /// The Space a window dinky manages leaves with focus, by closing or being minimized; nil when it does not.
+    /// Call before the event is tracked, while the window's placement still names its tree.
+    private func spaceLeft(by window: Window, removed: Bool) -> UInt64? {
+        let minimized = !removed && window.isMinimized && minimizedIDs.insert(window.id).inserted
+        if removed || !window.isMinimized { minimizedIDs.remove(window.id) }
+        guard removed || minimized, let placement = placements[window.id],
+              focusLosses.hadFocus(window.id, focused: lastFocused, at: FocusLosses.now) else { return nil }
+        if let space = placement.space ?? (window.spaceID != 0 ? window.spaceID : nil) { return space }
+        // A closing window can report no Space, and a minimized tile has left its tree before its close arrives
+        // (Ghostty minimizes a window it closes). It was on screen when it had focus: on the display under its frame.
+        let centre = CGPoint(x: window.frame.midX, y: window.frame.midY)
+        return displays.displays.first { $0.frame.contains(centre) }?.currentSpaceID
+    }
+
+    /// When the focused window closes or is minimized, macOS can leave its Space without keyboard focus: the app
+    /// stays active with no key window, or its window on another display comes to the front. `focus` then has
+    /// nothing to move from here. Once macOS has had its turn, focus the window on that Space that had focus last.
+    /// Nothing happens when a window on the Space has the keyboard.
+    private func scheduleRefocus(on space: UInt64, leaving id: WindowID) {
+        refocusCheck?.cancel()
+        let check = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            refocusCheck = nil
+            guard enabled, !MissionControl.shared.active, isVisible(space), !hasKeyboard(space, besides: id) else { return }
+            let eligible = { (candidate: WindowID) in
+                self.placements[candidate] != nil
+                    && self.model.windows[candidate].map { $0.isNormal && $0.spaceID == space } == true
+            }
+            guard let target = Self.refocusTarget(recent: focusHistory,
+                                                  front: dinky_space_window_ids(space, false).map(\.uint32Value),
+                                                  leaving: id, eligible: eligible) else { return }
+            print("\(stamp()) focus: \(id) left Space \(space) without keyboard focus, focused \(target)")
+            fflush(stdout)
+            focus(target)
+        }
+        refocusCheck = check
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(150), execute: check)
+    }
+
+    /// Whether the front app's key window, as Accessibility reports it, is on the Space and is not `leaving`. The
+    /// window server's front window is not enough: after a close it can name the app's window on another display.
+    private func hasKeyboard(_ space: UInt64, besides leaving: WindowID) -> Bool {
+        let key = frontWindowID()
+        return key != 0 && key != leaving && dinky_window_space_id(key) == space
+    }
+
+    /// The window to focus after `leaving` left its Space: the most recently focused one still eligible, else the
+    /// frontmost. `recent` runs most recent first. `front` lists the Space's windows front to back, and is read only
+    /// when no recent window is eligible.
+    static func refocusTarget(recent: [WindowID], front: @autoclosure () -> [WindowID], leaving: WindowID,
+                              eligible: (WindowID) -> Bool) -> WindowID? {
+        recent.first { $0 != leaving && eligible($0) } ?? front().first { $0 != leaving && eligible($0) }
     }
 
     /// The tree of a user Space, numbered workspace or not, created on first use. Nil for full-screen Spaces.
@@ -524,5 +598,33 @@ final class Coordinator {
         var sizes: [WindowID: CGSize] = [:]
         for id in workspace.windows { sizes[id] = applier.minimumSize(of: id, app: model.windows[id]?.bundleID) }
         return sizes
+    }
+}
+
+/// The windows that lost focus lately. A window that closes or is minimized while it has focus can lose it a few
+/// milliseconds before dinky hears of the close: macOS moves focus first (1 ms before Ghostty's close). A window the
+/// user had already left, and that then closes by itself, lost focus much earlier and does not count.
+struct FocusLosses {
+    static let grace: TimeInterval = 0.15
+    /// Seconds on a clock that never steps back and keeps counting while the Mac sleeps, so a loss just before sleep
+    /// does not look recent after it. `uptime()` stops during sleep.
+    static var now: TimeInterval { Double(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1_000_000_000 }
+    /// Oldest first; entries older than `grace` are dropped on the next loss.
+    private var recent: [(id: WindowID, at: TimeInterval)] = []
+    var count: Int { recent.count }
+
+    mutating func lost(_ id: WindowID, at time: TimeInterval) {
+        recent.removeAll { $0.id == id || time - $0.at > Self.grace }
+        if id != 0 { recent.append((id, time)) }
+    }
+
+    /// A closed window's ID can come back for a new window.
+    mutating func forget(_ id: WindowID) {
+        recent.removeAll { $0.id == id }
+    }
+
+    /// Whether `id` is `focused`, or lost focus at most `grace` before `time`.
+    func hadFocus(_ id: WindowID, focused: WindowID, at time: TimeInterval) -> Bool {
+        id == focused || recent.contains { $0.id == id && (0...Self.grace).contains(time - $0.at) }
     }
 }
