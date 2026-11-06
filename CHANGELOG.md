@@ -40,6 +40,7 @@
 
 - The configuration reference says which values the config accepts and how legacy values are handled: negative gaps, accordion padding and border widths load as 0, `inf` or `nan` border widths load as the default, and `01` or `+1` load as the plain workspace number in `[workspace-to-display]`.
 - A test checks that the configuration page shows the same default config dinky writes on first run.
+- Renamed keys, removed keys and renamed choice values are listed in one table, `Sources/DinkyConfig/KeyChanges.swift`, so a future rename keeps old configs loading, with a warning, by adding one entry.
 
 ## 0.24
 
