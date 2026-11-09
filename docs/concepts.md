@@ -100,11 +100,13 @@ Minimize repair only replaces no key window or the still-reported leaving window
 With a delayed notification, an earlier Escape or desktop click may not cancel that
 repair. Pointer movement and scrolling alone do not cancel it; focus-follows-mouse
 takes precedence when it actually focuses another window. Hiding an app does not
-trigger close/minimize repair. A modal save alert can own a separate key window;
-closing its document through that alert may leave native focus unchanged because
-the document no longer owns focus. Close repair can also be skipped when macOS
-redirects focus before the old window is observed departing: ownership of that
-window is then no longer established.
+trigger close/minimize repair.
+
+Known limits on macOS 27: when departure ownership cannot be established, a same-app
+cross-display close redirect and a close through a discard sheet or alert are left
+alone. The separate alert can own the key window rather than its document. Focus
+stays where macOS put it; dinky does not infer ownership from an unconfirmed focus
+loss.
 
 ## Rule
 
