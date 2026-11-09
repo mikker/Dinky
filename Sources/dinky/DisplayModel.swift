@@ -129,7 +129,12 @@ final class DisplayModel {
         if let display = display(containingSpace: dinky_window_space_id(wid)) { return display }
         let info = dinky_window_info(wid)
         guard info.exists else { return nil }
-        return displays.first { $0.frame.contains(CGPoint(x: info.frame.midX, y: info.frame.midY)) }
+        return display(containing: info.frame)
+    }
+
+    /// Also accepts the model's last frame when a closing window no longer has live WindowServer information.
+    func display(containing frame: CGRect) -> Display? {
+        displays.first { $0.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) }
     }
 
     func display(containingSpace spaceID: UInt64) -> Display? {

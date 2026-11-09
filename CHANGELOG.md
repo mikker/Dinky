@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-- Closing or minimizing the focused window no longer leaves its Space without keyboard focus. When it was its app's last window there, macOS kept the app active with no key window, or brought the app's window on another display to the front, and `focus left` had nowhere to move from. dinky now focuses the window on that Space that had focus last. When a window on the Space has the keyboard already, dinky leaves it.
+### Fixes
+
+- When closing or minimizing the focused window leaves no key window, focus its workspace's next tile. A later focus command, click or Space switch takes precedence. Existing keyboard focus, including on another display, is left alone. (#69, thanks @ivanmilov)
+- `debug-state` no longer crashes dinky when WindowServer returns an unavailable frame during a close or minimize. (#69, thanks @ivanmilov)
 
 ## 0.24
 

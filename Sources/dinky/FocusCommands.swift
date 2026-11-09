@@ -10,6 +10,7 @@ extension Dispatcher {
     /// goes on to the display in that direction; at the last edge `action` decides. A floating window, which
     /// has no tree, looks for the nearest window on screen instead.
     static func focus(_ direction: Direction, boundaries: FocusBoundaries, action: BoundariesAction) -> Reply {
+        AppState.shared.coordinator?.cancelRefocus()
         guard let coordinator = AppState.shared.coordinator,
               let found = coordinator.command({ $0.focus(direction) ? $0.focused : nil }) else {
             return focusOnScreen(direction)
@@ -68,6 +69,7 @@ extension Dispatcher {
     /// Focuses `window`, or, with none, makes `display` the focused one until a window takes focus, and takes the
     /// keyboard off any window on another Space.
     static func focus(_ display: Display, window: WindowID?) -> Reply {
+        AppState.shared.coordinator?.cancelRefocus()
         if let window { return focus(window: window) }
         focusDesktop(of: display)
         let model = AppState.shared.displays
