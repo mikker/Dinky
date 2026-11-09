@@ -38,6 +38,14 @@ extension Command {
 
     /// Nil for arguments that don't fit; `focus` and the list-* queries throw a message naming the problem.
     private static func parse(_ name: String, _ args: [String]) throws(CommandError) -> Command? {
+        if ["move-window-to-workspace", "move-window-to-display", "layout", "workspace-layout"].contains(name),
+           let index = args.firstIndex(of: "--window-id") {
+            guard args.indices.contains(index + 1), let id = UInt32(args[index + 1]), id > 0 else { return nil }
+            var rest = args
+            rest.removeSubrange(index...index + 1)
+            guard !rest.contains("--window-id"), let command = try parse(name, rest) else { return nil }
+            return .targetWindow(id, command)
+        }
         let none = args.isEmpty
         let one = args.count == 1 ? args[0] : nil
         switch name {
@@ -46,15 +54,9 @@ extension Command {
         case "workspace-back-and-forth":
             return none ? .workspaceBackAndForth : nil
         case "move-window-to-workspace":
-            var (rest, follow) = followFlag(args)
-            var windowID: UInt32?
-            if let index = rest.firstIndex(of: "--window-id") {
-                guard rest.indices.contains(index + 1), let id = UInt32(rest[index + 1]), id > 0 else { return nil }
-                windowID = id
-                rest.removeSubrange(index...index + 1)
-            }
+            let (rest, follow) = followFlag(args)
             guard rest.count == 1, let target = workspaceTarget(rest[0]) else { return nil }
-            return .moveWindowToWorkspace(target, follow: follow, windowID: windowID)
+            return .moveWindowToWorkspace(target, follow: follow)
         case "move-window-to-display":
             let (rest, follow) = followFlag(args)
             guard rest.count == 1, let target = DisplayTarget(rawValue: rest[0]) else { return nil }

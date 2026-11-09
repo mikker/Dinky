@@ -20,6 +20,14 @@ enum Dispatcher {
     /// window rules; bindings and the CLI leave it nil.
     static func run(_ command: Command, window: WindowID? = nil, env: [String: String] = [:]) -> Reply {
         switch command {
+        case .targetWindow(let id, let command):
+            guard windowList().contains(where: { $0.id == id }),
+                  !dinky_window_info(id).isMinimized,
+                  AppState.shared.coordinator?.isFloating(id) != nil,
+                  AppState.shared.numbers.number(of: dinky_window_space_id(id)) != nil else {
+                return .error("window \(id) is not a managed window on a numbered workspace; see `dinky list-windows --all`")
+            }
+            return run(command, window: id, env: env)
         case .workspace(let target):
             return switchWorkspace(target)
         case .workspaceBackAndForth:
@@ -29,13 +37,8 @@ enum Dispatcher {
                 return .error("no previous workspace")
             }
             return switchWorkspace(.number(n))
-        case .moveWindowToWorkspace(let target, let follow, let windowID):
-            let wid = windowID ?? window ?? focusedWindowID()
-            if let windowID, !dinky_window_info(windowID).exists {
-                return .error("no window with ID \(windowID)")
-            }
-            return moveWindowToWorkspace(target, follow: follow, window: wid,
-                                         refocus: windowID == nil || wid == focusedWindowID())
+        case .moveWindowToWorkspace(let target, let follow):
+            return moveWindowToWorkspace(target, follow: follow, window: window)
         case .moveWindowToDisplay(let target, let follow):
             return moveWindowToDisplay(target, follow: follow, window: window ?? focusedWindowID())
         case .focus(let direction, let boundaries, let action):
@@ -113,9 +116,9 @@ enum Dispatcher {
         init(_ text: String) { reply = .error(text) }
     }
 
-    /// The workspace a target names. `prev` and `next` step through the focused display's workspaces in number
-    /// order, without wrapping, from the one it shows or is switching to, so rapid requests add up.
-    private static func resolve(_ target: WorkspaceTarget) throws(Refusal) -> Int {
+    /// Relative targets step from an overridden window's Space, or from the focused display's current or
+    /// pending workspace so rapid requests add up. Neither wraps nor crosses displays.
+    private static func resolve(_ target: WorkspaceTarget, relativeTo space: UInt64? = nil) throws(Refusal) -> Int {
         let model = AppState.shared.displays
         let numbers = AppState.shared.numbers
         model.reconcile()
@@ -124,7 +127,8 @@ enum Dispatcher {
             guard (1...numbers.count).contains(n) else { throw Refusal("no workspace \(n), there are \(numbers.count)") }
             return n
         case .prev, .next:
-            guard let display = model.focusedDisplay(), let current = numbers.number(of: targetSpaceID(on: display)) else {
+            let display = space.flatMap { model.display(containingSpace: $0) } ?? model.focusedDisplay()
+            guard let display, let current = numbers.number(of: space ?? targetSpaceID(on: display)) else {
                 throw Refusal("not on a numbered workspace")
             }
             let here = numbers.workspaces(on: display)
@@ -170,11 +174,11 @@ enum Dispatcher {
         return .ok("workspace \(n)")
     }
 
-    private static func moveWindowToWorkspace(_ target: WorkspaceTarget, follow: Bool, window wid: WindowID,
-                                              refocus: Bool) -> Reply {
+    private static func moveWindowToWorkspace(_ target: WorkspaceTarget, follow: Bool, window: WindowID?) -> Reply {
+        let wid = window ?? focusedWindowID()
         let n: Int
         do {
-            n = try resolve(target)
+            n = try resolve(target, relativeTo: window.map { dinky_window_space_id($0) })
         } catch {
             return error.reply
         }
@@ -182,8 +186,7 @@ enum Dispatcher {
               let to = AppState.shared.displays.display(containingSpace: space) else {
             return .error("workspace \(n) has no Space; see `dinky doctor`")
         }
-        if let reply = relocate(wid, to: space, on: to, destination: "workspace \(n)", follow: follow,
-                                refocus: refocus) { return reply }
+        if let reply = relocate(wid, to: space, on: to, destination: "workspace \(n)", follow: follow) { return reply }
         // macOS activates another app when the Space left behind loses the active app's window, so focus the
         // moved window once its workspace shows.
         if follow { _ = show(n) { AppState.shared.coordinator?.focus(wid) } }
@@ -267,17 +270,21 @@ enum Dispatcher {
         return nil
     }
 
-    /// Moves a window to a Space on display `to` and tells the coordinator, which refocuses the Space left
-    /// behind unless the caller follows the window. Nil once moved, else the reply to answer (an error, or ok
-    /// when the window is already there).
+    /// Moves a window to a Space on display `to` and tells the coordinator. Only a focused window needs a
+    /// focus handoff on the Space left behind, and only when not following it. Nil lets the caller finish
+    /// --follow, even when already there; otherwise returns the reply to answer.
     private static func relocate(_ wid: WindowID, to space: UInt64, on to: Display, destination: String,
-                                 follow: Bool, refocus: Bool = true) -> Reply? {
+                                 follow: Bool) -> Reply? {
         guard wid != 0 else { return .error("no focused window") }
-        guard dinky_window_space_id(wid) != space else { return .ok("window \(wid) is already on \(destination)") }
+        if dinky_window_space_id(wid) == space {
+            // Let the caller perform --follow even when no move is needed.
+            return follow ? nil : .ok("window \(wid) is already on \(destination)")
+        }
+        let hadFocus = wid == AppState.shared.coordinator?.focusedWindow
         let from = AppState.shared.displays.display(ofWindow: wid)
         if let error = move(wid, to: space, arriving: destination) { return error }
         if let from { keepOffset(of: wid, from: from, to: to) }
-        AppState.shared.coordinator?.windowMoved(wid, refocus: refocus && !follow)
+        AppState.shared.coordinator?.windowMoved(wid, refocus: hadFocus && !follow)
         return nil
     }
 
