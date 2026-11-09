@@ -16,15 +16,15 @@ prints it.
 |---|---|
 | `workspace <n\|prev\|next>` | Show a workspace and focus its display. `prev`/`next` step through the focused display's and don't wrap. |
 | `workspace-back-and-forth` | Switch to the previous workspace. |
-| `move-window-to-workspace <n\|prev\|next> [--follow]` | Move the focused window, and with `--follow` go too. |
-| `move-window-to-display <next\|prev> [--follow]` | Move the focused window to another display's workspace. |
+| `move-window-to-workspace <n\|prev\|next> [--follow] [--window-id <id>]` | Move the focused window or the window with the given ID. With `--follow`, switch to the destination. |
+| `move-window-to-display <next\|prev> [--follow] [--window-id <id>]` | Move the focused or selected window to another display's workspace. |
 | `focus <left\|down\|up\|right> [--boundaries <b>] [--boundaries-action <a>]` | Focus the nearest window. `--boundaries` is `workspace` (default) or `all-monitors-outer-frame`, which continues onto the next display. `--boundaries-action` is `stop` (default), `fail`, `wrap-around-the-workspace` (`--wrap-around`) or `wrap-around-all-monitors`, which needs `all-monitors-outer-frame`. |
 | `focus-monitor <left\|down\|up\|right\|next\|prev\|n>` | Focus a display. |
 | `move <left\|down\|up\|right>` | Move the focused window in the tree. |
 | `join-with <left\|down\|up\|right>` | Put the focused window and its neighbour in a new container. |
 | `resize <smart\|width\|height> <+n\|-n>` | Resize by n points. |
-| `layout <tiles\|accordion\|horizontal\|vertical\|auto\|h_tiles\|v_tiles\|h_accordion\|v_accordion\|floating\|tiling>...` | Set the layout of the focused window's container, or float/tile the window. In a [master layout](configuration.md#master) the container is the stack, in a [scrolling layout](configuration.md#scrolling) the window's column. Given several, applies the one after the current one, so `layout floating tiling` and `layout tiles accordion` toggle. Acts on the focused window, tiling it first if it floats, so it does nothing on an empty workspace. |
-| `workspace-layout <dwindle\|master\|scrolling>...` | Switch the focused window's workspace to its tree (`dwindle`, as its config gives it), to [master](configuration.md#master) with the focused window as the master, or to [scrolling](configuration.md#scrolling). The switch holds until the next. Given several, applies the one after the current one, so `workspace-layout dwindle master` toggles and `workspace-layout dwindle master scrolling` cycles. |
+| `layout <tiles\|accordion\|horizontal\|vertical\|auto\|h_tiles\|v_tiles\|h_accordion\|v_accordion\|floating\|tiling>... [--window-id <id>]` | Set the layout of the focused or selected window's container, or float/tile the window. In a [master layout](configuration.md#master) the container is the stack, in a [scrolling layout](configuration.md#scrolling) the window's column. Given several, applies the one after the current one, so `layout floating tiling` and `layout tiles accordion` toggle. Tiles the window first if it floats, so it does nothing on an empty workspace without an ID. |
+| `workspace-layout <dwindle\|master\|scrolling>... [--window-id <id>]` | Switch the focused or selected window's workspace to its tree (`dwindle`, as its config gives it), to [master](configuration.md#master) with that window as the master, or to [scrolling](configuration.md#scrolling). The switch holds until the next. Given several, applies the one after the current one, so `workspace-layout dwindle master` toggles and `workspace-layout dwindle master scrolling` cycles. |
 | `fullscreen` | Toggle filling the workspace (not macOS full screen). [`fullscreen-width`](configuration.md#top-level) narrows and centres it. |
 | `flatten-workspace-tree` | Put every window back into the workspace's layout, in order, undoing tree edits. A scrolling workspace keeps its column widths. |
 | `balance-sizes` | Give every window an equal share. |
@@ -43,6 +43,30 @@ prints it.
 Workspaces are numbered across displays; see
 [`[workspace-to-display]`](configuration.md#workspace-to-display). A full-screen
 app's Space has no number, nor does the Space of a display without workspaces.
+
+### Targeting a window
+
+`move-window-to-workspace`, `move-window-to-display`, `layout` and
+`workspace-layout` accept `--window-id <id>` before or after their other arguments.
+Without it, they act on the focused window (or the new window in a rule).
+Find IDs with `dinky list-windows --all`. Only managed windows on numbered
+workspaces can be targeted: tiled and floating windows, not minimized, hidden,
+native full-screen, system or border windows. A stale or ineligible ID is an error.
+Layout commands change the selected window's container or workspace without
+switching Spaces or focusing it.
+
+With an explicit ID, `move-window-to-workspace prev` and `next` step from the
+window's workspace, on its display, without wrapping. Without an ID, they step
+from the focused display's current or pending workspace, as `workspace` does.
+Display moves always step from the window's display.
+
+Moving without `--follow` keeps focus where you are. Bringing a window to the
+current workspace does not focus it. Use `--follow` to show its destination and
+focus it, including when it is already there:
+
+```sh
+dinky move-window-to-workspace 3 --window-id 12345 --follow
+```
 
 ## Command line
 

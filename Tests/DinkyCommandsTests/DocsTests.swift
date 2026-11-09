@@ -33,4 +33,15 @@ struct DocsTests {
             #expect(documented.contains(name) || documented.contains("%{\(name)}"), "\(name)")
         }
     }
+
+    @Test func `Window targeting syntax stays in the help and manual`() {
+        let targets: Set<String> = ["move-window-to-workspace", "move-window-to-display", "layout", "workspace-layout"]
+        let manual = Self.spans(Self.commands)
+        for doc in Command.all {
+            #expect(doc.syntax.contains("--window-id <id>") == targets.contains(doc.name))
+            if targets.contains(doc.name) {
+                #expect(manual.contains { $0.hasPrefix("\(doc.name) ") && $0.contains("--window-id <id>") })
+            }
+        }
+    }
 }

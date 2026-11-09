@@ -6,6 +6,8 @@ import DinkyLayout
 public enum Command: Equatable, Sendable {
     case workspace(WorkspaceTarget)
     case workspaceBackAndForth
+    /// An explicit target for commands that already accept a window override in the dispatcher.
+    indirect case targetWindow(UInt32, Command)
     case moveWindowToWorkspace(WorkspaceTarget, follow: Bool)
     case moveWindowToDisplay(DisplayTarget, follow: Bool)
     /// Focus the neighbour in a direction. `boundaries` says where the search stops, `action` what happens there.

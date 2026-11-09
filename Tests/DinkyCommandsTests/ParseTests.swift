@@ -20,6 +20,39 @@ struct ParseTests {
         #expect(try parse("move-window-to-workspace prev") == .moveWindowToWorkspace(.prev, follow: false))
     }
 
+    @Test func `Move a specific window to a workspace`() throws {
+        #expect(try parse("move-window-to-workspace 3 --window-id 12345") ==
+                .targetWindow(12345, .moveWindowToWorkspace(.number(3), follow: false)))
+        #expect(try parse("move-window-to-workspace --window-id 12345 --follow next") ==
+                .targetWindow(12345, .moveWindowToWorkspace(.next, follow: true)))
+        for args in ["3 --window-id", "3 --window-id 0", "3 --window-id -1", "3 --window-id abc",
+                     "3 --window-id 4294967296", "3 --window-id 1 --window-id 2"] {
+            #expect(throws: CommandError.self) { try parse("move-window-to-workspace \(args)") }
+        }
+    }
+
+    @Test func `Explicit window targets share parsing across supported commands`() throws {
+        for (line, expected) in [
+            ("move-window-to-workspace prev --follow", Command.moveWindowToWorkspace(.prev, follow: true)),
+            ("move-window-to-display next --follow", .moveWindowToDisplay(.next, follow: true)),
+            ("layout floating tiling", .layout([.floating, .tiling])),
+            ("workspace-layout dwindle master", .workspaceLayout([.dwindle, .master]))
+        ] {
+            let words = line.split(separator: " ", maxSplits: 1)
+            for command in ["\(line) --window-id 4294967295",
+                            "\(words[0]) --window-id 4294967295 \(words[1])"] {
+                #expect(try parse(command) == .targetWindow(UInt32.max, expected))
+            }
+            for value in ["", "0", "-1", "abc", "4294967296", "1 --window-id 2"] {
+                #expect(throws: CommandError.self) { try parse("\(line) --window-id \(value)") }
+            }
+        }
+        for line in ["workspace 2", "focus left", "move left", "fullscreen", "retile", "list-windows --all"] {
+            #expect(throws: CommandError.self) { try parse("\(line) --window-id 123") }
+        }
+        #expect(try parse("exec-and-forget echo --window-id 123") == .execAndForget("echo --window-id 123"))
+    }
+
     @Test func `Move window to display`() throws {
         #expect(try parse("move-window-to-display next") == .moveWindowToDisplay(.next, follow: false))
         #expect(try parse("move-window-to-display prev --follow") == .moveWindowToDisplay(.prev, follow: true))

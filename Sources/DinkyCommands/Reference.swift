@@ -17,10 +17,13 @@ extension Command {
                 + "prev and next step through the focused display's workspaces."),
         Doc(syntax: "workspace-back-and-forth",
             description: "Switch to the workspace that was focused before the current one."),
-        Doc(syntax: "move-window-to-workspace <number|prev|next> [--follow]",
-            description: "Move the focused window to a workspace. With --follow, switch there too."),
-        Doc(syntax: "move-window-to-display <next|prev> [--follow]",
-            description: "Move the focused window to the next or previous display's current workspace. With --follow, focus it there."),
+        Doc(syntax: "move-window-to-workspace <number|prev|next> [--follow] [--window-id <id>]",
+            description: "Move the focused window, or a managed window from list-windows --all with --window-id. "
+                + "With an explicit ID, prev/next step from that window's workspace; otherwise from the focused display's. "
+                + "Without --follow, keep focus here, even when bringing a window here. With --follow, show and focus the destination window, even if already there."),
+        Doc(syntax: "move-window-to-display <next|prev> [--follow] [--window-id <id>]",
+            description: "Move the focused window, or the managed window selected by --window-id, to the next or previous display's current workspace. "
+                + "Without --follow, keep focus here. With --follow, focus it there."),
         Doc(syntax: "focus <left|down|up|right> [--boundaries workspace|all-monitors-outer-frame] "
                 + "[--boundaries-action stop|fail|wrap-around-the-workspace|wrap-around-all-monitors]",
             description: "Focus the neighbouring window in a direction in the layout tree. At the workspace edge, "
@@ -37,17 +40,19 @@ extension Command {
             description: "Put the focused window and its neighbour in a new container."),
         Doc(syntax: "resize <smart|width|height> <+N|-N>",
             description: "Grow or shrink the focused window by N points: smart along its container, width or height along that axis."),
-        Doc(syntax: "layout <tiles|accordion|horizontal|vertical|auto|h_tiles|v_tiles|h_accordion|v_accordion|floating|tiling>...",
+        Doc(syntax: "layout <tiles|accordion|horizontal|vertical|auto|h_tiles|v_tiles|h_accordion|v_accordion|floating|tiling>... [--window-id <id>]",
             description: "Set the layout of the focused window's container, or float or tile the window. "
+                + "--window-id selects a managed window from list-windows --all instead, without focusing it. "
                 + "tiles and accordion set the mode, horizontal, vertical and auto (follow the container's longer side) "
                 + "the orientation, h_accordion and the like both. In a master layout the container is the stack, "
                 + "in a scrolling layout the window's column. "
                 + "With several, apply the one after the last that describes the window now, so 'layout floating tiling' "
                 + "and 'layout tiles accordion' toggle. "
                 + "An auto container counts as the orientation it follows now."),
-        Doc(syntax: "workspace-layout <dwindle|master|scrolling>...",
-            description: "Switch the focused window's workspace to its tree (dwindle, as its config gives it), "
-                + "the master layout with the focused window as the master, or the scrolling layout. "
+        Doc(syntax: "workspace-layout <dwindle|master|scrolling>... [--window-id <id>]",
+            description: "Switch the focused window's workspace, or that of the managed window selected by --window-id, "
+                + "without focusing it, to its tree (dwindle, as its config gives it), "
+                + "the master layout with that window as the master, or the scrolling layout. "
                 + "The switch holds until the next. With several, apply the one after the one the workspace has now, "
                 + "so 'workspace-layout dwindle master' toggles and 'workspace-layout dwindle master scrolling' cycles."),
         Doc(syntax: "fullscreen",

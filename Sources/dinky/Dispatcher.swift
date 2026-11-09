@@ -5,7 +5,7 @@ import DinkyLayout
 import DinkyPrivate
 
 // Runs commands from bindings, the CLI and the menu against what exists today. Main thread only.
-// Workspaces are numbered across displays; `prev` and `next` step through the focused display's.
+// Workspaces are numbered across displays; relative workspace targets stay within one display.
 enum Dispatcher {
     /// `env` is added to the environment of an `exec-and-forget`, for hooks.
     static func run(_ line: String, env: [String: String] = [:]) -> Reply {
@@ -16,10 +16,28 @@ enum Dispatcher {
         }
     }
 
-    /// Runs a command. `window` stands in for the focused window in commands that act on one, for
-    /// window rules; bindings and the CLI leave it nil.
+    /// `window` stands in for the focused window in commands that act on one. Rules supply it directly;
+    /// --window-id uses the same path after validating that the window can be targeted.
     static func run(_ command: Command, window: WindowID? = nil, env: [String: String] = [:]) -> Reply {
         switch command {
+        case .targetWindow(let id, let command):
+            guard windowList().contains(where: { $0.id == id }),
+                  !dinky_window_info(id).isMinimized,
+                  AppState.shared.coordinator?.isFloating(id) != nil,
+                  AppState.shared.numbers.number(of: dinky_window_space_id(id)) != nil else {
+                return .error("window \(id) is not a managed window on a numbered workspace; see `dinky list-windows --all`")
+            }
+            // Only an explicit ID changes relative workspace semantics. Rules already supply an implicit
+            // window override and retain their focused-display targets.
+            if case .moveWindowToWorkspace(let target, let follow) = command {
+                do {
+                    let n = try resolve(target, relativeTo: dinky_window_space_id(id))
+                    return run(.moveWindowToWorkspace(.number(n), follow: follow), window: id, env: env)
+                } catch {
+                    return error.reply
+                }
+            }
+            return run(command, window: id, env: env)
         case .workspace(let target):
             return switchWorkspace(target)
         case .workspaceBackAndForth:
@@ -108,9 +126,9 @@ enum Dispatcher {
         init(_ text: String) { reply = .error(text) }
     }
 
-    /// The workspace a target names. `prev` and `next` step through the focused display's workspaces in number
-    /// order, without wrapping, from the one it shows or is switching to, so rapid requests add up.
-    private static func resolve(_ target: WorkspaceTarget) throws(Refusal) -> Int {
+    /// Relative targets step from an explicitly selected window's Space, or from the focused display's current or
+    /// pending workspace so rapid requests add up. Neither wraps nor crosses displays.
+    private static func resolve(_ target: WorkspaceTarget, relativeTo space: UInt64? = nil) throws(Refusal) -> Int {
         let model = AppState.shared.displays
         let numbers = AppState.shared.numbers
         model.reconcile()
@@ -119,7 +137,8 @@ enum Dispatcher {
             guard (1...numbers.count).contains(n) else { throw Refusal("no workspace \(n), there are \(numbers.count)") }
             return n
         case .prev, .next:
-            guard let display = model.focusedDisplay(), let current = numbers.number(of: targetSpaceID(on: display)) else {
+            let display = space.flatMap { model.display(containingSpace: $0) } ?? model.focusedDisplay()
+            guard let display, let current = numbers.number(of: space ?? targetSpaceID(on: display)) else {
                 throw Refusal("not on a numbered workspace")
             }
             let here = numbers.workspaces(on: display)
@@ -260,17 +279,22 @@ enum Dispatcher {
         return nil
     }
 
-    /// Moves a window to a Space on display `to` and tells the coordinator, which refocuses the Space left
-    /// behind unless the caller follows the window. Nil once moved, else the reply to answer (an error, or ok
-    /// when the window is already there).
+    /// Moves a window to a Space on display `to` and tells the coordinator. Only a focused window needs a
+    /// focus handoff on the Space left behind, and only when not following it. Nil lets the caller finish
+    /// --follow, even when already there; otherwise returns the reply to answer.
     private static func relocate(_ wid: WindowID, to space: UInt64, on to: Display, destination: String,
                                  follow: Bool) -> Reply? {
         guard wid != 0 else { return .error("no focused window") }
-        guard dinky_window_space_id(wid) != space else { return .ok("window \(wid) is already on \(destination)") }
+        let source = dinky_window_space_id(wid)
+        if source == space {
+            // Let the caller perform --follow even when no move is needed.
+            return follow ? nil : .ok("window \(wid) is already on \(destination)")
+        }
+        let refocusFrom: UInt64? = !follow && wid == AppState.shared.coordinator?.focusedWindow ? source : nil
         let from = AppState.shared.displays.display(ofWindow: wid)
         if let error = move(wid, to: space, arriving: destination) { return error }
         if let from { keepOffset(of: wid, from: from, to: to) }
-        AppState.shared.coordinator?.windowMoved(wid, refocus: !follow)
+        AppState.shared.coordinator?.windowMoved(wid, refocusFrom: refocusFrom)
         return nil
     }
 
