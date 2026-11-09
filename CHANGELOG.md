@@ -10,7 +10,7 @@
 
 - Moving a focused floating window without `--follow` focuses a tiled window left on its source workspace, when there is one (#68, thanks @albertomalossi).
 - Finder folders opened from the Desktop tile once their opening animation finishes, instead of staying floating until dinky restarts (#67, thanks @albertomalossi).
-- Closing or minimizing the focused window no longer leaves its Space without keyboard focus. When macOS gives no window there the keyboard, dinky focuses the workspace's next tile, so `focus` commands keep working without a click. On macOS 15, a close also takes focus back when macOS hands it to the app's window on another display; macOS 27 reports the focus change too early to tell it from a deliberate switch, so there dinky leaves it. A key press, click, focus command or Space switch right after the close wins, and dragging a tab into another window is left alone. Hiding an app does not trigger it (#69, thanks @ivanmilov).
+- Closing or minimizing the focused window no longer leaves its Space without keyboard focus: dinky focuses the workspace's next tile, so `focus` commands work without a click. A key press, click, focus command or Space switch right after the close still wins. On macOS 15 this also takes focus back when macOS hands it to the app's window on another display; on macOS 27 dinky can't tell that from a deliberate switch and leaves it (#69, thanks @ivanmilov).
 - Layout stacking no longer brings back a window you are minimizing when a slow layout pass finishes during the animation (#69).
 - `debug-state` no longer crashes dinky when a window's frame is briefly unavailable during a close or minimize (#69).
 
