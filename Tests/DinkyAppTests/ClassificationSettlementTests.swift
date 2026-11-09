@@ -57,4 +57,20 @@ struct ClassificationSettlementTests {
         #expect(!owner.awaitClassification(67, unsettled: true, now: 101))
         #expect(owner.awaitClassification(68, unsettled: true, now: 101))
     }
+
+    @Test func explicitLayoutChoiceIsRememberedWhileSettling() {
+        let owner = coordinator()
+        #expect(owner.isFloating(67) == nil)
+        #expect(!owner.setFloating(67, true))
+        #expect(owner.awaitClassification(67, unsettled: true, now: 100))
+        #expect(owner.isFloating(67) == true)
+        #expect(owner.setFloating(67, false))
+        #expect(owner.isFloating(67) == false)
+        #expect(owner.setFloating(67, true))
+        let settlement = owner.settlements[67]
+        #expect(!owner.awaitClassification(67, unsettled: false, now: 100.2))
+        // track retains this snapshot while classification clears the pending entry.
+        #expect(settlement?.floating == true)
+        #expect(owner.settlements.isEmpty)
+    }
 }

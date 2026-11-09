@@ -355,8 +355,9 @@ final class Coordinator {
             guard enabled, window.isNormal, isVisible(window.spaceID) else { return }
             // Once, on the first classification attempt, not again on its retries.
             if settlements[window.id] == nil { noteFirstShowing(window) }
+            let settlement = settlements[window.id]
             guard let classification = classify(window) else { return }
-            placements[window.id] = Placement(floating: classification.floating, space: nil)
+            placements[window.id] = Placement(floating: settlement?.floating ?? classification.floating, space: nil)
             if !classification.runsRules, adopt(window) { return }
         }
         guard !adopting.contains(window.id), !placements[window.id]!.floating else { return }

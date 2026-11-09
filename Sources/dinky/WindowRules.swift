@@ -7,6 +7,8 @@ import DinkyConfig
 /// A real settling interval, independent of how many window events arrive during the opening animation.
 final class ClassificationSettlement {
     let deadline: TimeInterval
+    /// An explicit layout command while AX is settling takes precedence over the eventual default or rule.
+    var floating: Bool?
     init(now: TimeInterval) { deadline = now + 1 }
     func isWaiting(at now: TimeInterval) -> Bool { now < deadline }
 }
