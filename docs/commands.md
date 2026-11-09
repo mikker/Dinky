@@ -62,6 +62,9 @@ CLI-only commands:
 
 The log is `~/Library/Logs/dinky.log`; attach it to bug reports.
 
+`debug-state` reports frames as `[x, y, width, height]`. An unavailable frame,
+including a transient frame during a close or minimize, is `[]`.
+
 Scripts can skip the CLI and talk to the socket: one command per connection,
 answered with `ok` or `error` and the reply.
 
