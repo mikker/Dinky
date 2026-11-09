@@ -364,7 +364,7 @@
     "command": {
       "type": "string",
       "pattern": "^\\s*(workspace|workspace-back-and-forth|move-window-to-workspace|move-window-to-display|focus|focus-monitor|move|join-with|resize|layout|workspace-layout|fullscreen|flatten-workspace-tree|balance-sizes|swap-with-master|retile|clear-minimum-sizes|mode|reload-config|enable|list-workspaces|list-windows|list-monitors|list-displays|list-modes|debug-state|exec-and-forget)(\\s.*)?$",
-      "description": "A dinky command, as `dinky help` lists them: `workspace 3`, `layout floating`, `exec-and-forget open -a Safari`."
+      "description": "A dinky command, as `dinky help` lists them: `workspace 3`, `layout floating`, `exec-and-forget open -a Safari`. move-window-to-workspace, move-window-to-display, layout and workspace-layout accept --window-id <id> to target a managed window on a numbered workspace."
     },
     "commands": {
       "description": "A command or a list of commands, run in order.",

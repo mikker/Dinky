@@ -5,7 +5,7 @@ import DinkyLayout
 import DinkyPrivate
 
 // Runs commands from bindings, the CLI and the menu against what exists today. Main thread only.
-// Workspaces are numbered across displays; `prev` and `next` step through the focused display's.
+// Workspaces are numbered across displays; relative workspace targets stay within one display.
 enum Dispatcher {
     /// `env` is added to the environment of an `exec-and-forget`, for hooks.
     static func run(_ line: String, env: [String: String] = [:]) -> Reply {
@@ -16,8 +16,8 @@ enum Dispatcher {
         }
     }
 
-    /// Runs a command. `window` stands in for the focused window in commands that act on one, for
-    /// window rules; bindings and the CLI leave it nil.
+    /// `window` stands in for the focused window in commands that act on one. Rules supply it directly;
+    /// --window-id uses the same path after validating that the window can be targeted.
     static func run(_ command: Command, window: WindowID? = nil, env: [String: String] = [:]) -> Reply {
         switch command {
         case .targetWindow(let id, let command):
