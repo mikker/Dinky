@@ -109,16 +109,13 @@ extension Coordinator {
     }
 
     /// Moves a window dinky just moved to another Space into that Space's tree now, rather than on the next event.
-    /// macOS leaves keyboard focus with the moved window, so unless we are about to follow it, focus the window
-    /// that took its place in the tree it left.
-    func windowMoved(_ id: WindowID, refocus: Bool = true) {
+    /// `source` requests a focus handoff there. The caller captures it before moving, only for a focused window
+    /// it isn't following; remembered tree focus and tiled placement cannot tell us that for a floating window.
+    func windowMoved(_ id: WindowID, refocusFrom source: UInt64? = nil) {
         guard model.windows[id] != nil else { return }
-        // The tree's own record: by now macOS has already re-pointed the app's frontmost window elsewhere.
-        let from = placements[id]?.space
-        let hadFocus = from.flatMap { workspaces[$0]?.focused } == id
         // Re-reads its Space; the update it publishes reaches handle, which tracks the window and flushes.
         model.refresh(id)
-        guard refocus, hadFocus, let from, let successor = workspaces[from]?.focused, successor != id else { return }
+        guard let source, let successor = workspaces[source]?.focused, successor != id else { return }
         focus(successor)
     }
 }

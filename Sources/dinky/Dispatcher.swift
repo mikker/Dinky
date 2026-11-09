@@ -285,15 +285,16 @@ enum Dispatcher {
     private static func relocate(_ wid: WindowID, to space: UInt64, on to: Display, destination: String,
                                  follow: Bool) -> Reply? {
         guard wid != 0 else { return .error("no focused window") }
-        if dinky_window_space_id(wid) == space {
+        let source = dinky_window_space_id(wid)
+        if source == space {
             // Let the caller perform --follow even when no move is needed.
             return follow ? nil : .ok("window \(wid) is already on \(destination)")
         }
-        let hadFocus = wid == AppState.shared.coordinator?.focusedWindow
+        let refocusFrom: UInt64? = !follow && wid == AppState.shared.coordinator?.focusedWindow ? source : nil
         let from = AppState.shared.displays.display(ofWindow: wid)
         if let error = move(wid, to: space, arriving: destination) { return error }
         if let from { keepOffset(of: wid, from: from, to: to) }
-        AppState.shared.coordinator?.windowMoved(wid, refocus: hadFocus && !follow)
+        AppState.shared.coordinator?.windowMoved(wid, refocusFrom: refocusFrom)
         return nil
     }
 
