@@ -209,7 +209,7 @@ final class FrameApplier {
     }
 
     /// A pass can outlive native minimization: AXRaise would undo it, even before WindowServer updates its tags.
-    static func mayRaise(minimized: Bool?) -> Bool { minimized == false }
+    static func mayRaise(minimized: Bool?) -> Bool { minimized != true }
 
     /// Raise back to front, so the last raised ends up frontmost. AXRaise does not activate the app.
     private func raise(_ ids: [WindowID], pids: [WindowID: pid_t], permit: Int) {
@@ -220,8 +220,9 @@ final class FrameApplier {
                 guard self.writes.allows(permit) else { return AXError.success }
                 var minimized: CFTypeRef?
                 let error = AXUIElementCopyAttributeValue(element, kAXMinimizedAttribute as CFString, &minimized)
-                guard error == .success else { return error }
-                guard Self.mayRaise(minimized: (minimized as? NSNumber)?.boolValue) else { return .success }
+                if error == .invalidUIElement { return error }
+                let isMinimized = error == .success ? (minimized as? NSNumber)?.boolValue : nil
+                guard Self.mayRaise(minimized: isMinimized) else { return .success }
                 return AXUIElementPerformAction(element, kAXRaiseAction as CFString)
             }
         }

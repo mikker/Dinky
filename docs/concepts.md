@@ -84,13 +84,27 @@ One window has focus, and its border says so. `focus left` and friends move it
 to the nearest window that way; with `--boundaries all-monitors-outer-frame`,
 across the display edge too. [`[focus-follows-mouse]`](configuration.md#focus-follows-mouse)
 moves it with the pointer instead. When the focused window closes or is minimized
-and macOS leaves no key window, or redirects the same app's key window to another
-display, focus goes to its workspace's next tile. It is the same one shown by an
-accordion or focused after moving a window away. This also applies when hiding or
-quitting the focused app leaves no key window. A later key, click, pointer movement,
+and macOS leaves no key window, focus goes to its workspace's next tile. A close
+also repairs a redirect of the same app's key window to another display. The next
+tile is the same one shown by an accordion or focused after moving a window away.
+This also applies when quitting the
+focused app removes its window and leaves no key window. A later key, click,
 focus command or Space switch takes precedence; dragging and merging tabs does not
 pull focus back. Another app's key window, or a key window on the original display,
 is left alone. Empty workspaces and native full-screen Spaces have no tile to focus.
+
+The input snapshot is taken when the departure is observed. A minimize that macOS
+redirects to the app's window on another display is left alone: a late minimize
+notification cannot distinguish that redirect from the user's click on that window.
+Minimize repair only replaces no key window or the still-reported leaving window.
+With a delayed notification, an earlier Escape or desktop click may not cancel that
+repair. Pointer movement and scrolling alone do not cancel it; focus-follows-mouse
+takes precedence when it actually focuses another window. Hiding an app does not
+trigger close/minimize repair. A modal save alert can own a separate key window;
+closing its document through that alert may leave native focus unchanged because
+the document no longer owns focus. Close repair can also be skipped when macOS
+redirects focus before the old window is observed departing: ownership of that
+window is then no longer established.
 
 ## Rule
 

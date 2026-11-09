@@ -424,19 +424,23 @@ final class Coordinator {
     /// Follows focus into the trees, so new windows land beside the focused one and accordions show it.
     private func syncFocus() {
         let id = focusedWindow
-        if let focusing, focusing.id != id, Date() < focusing.until { return }
+        let deferring = focusing.map { $0.id != id && Date() < $0.until } ?? false
         if id != lastFocused {
             // Before the override goes: a new window can take focus before it shows. See Adoption.swift.
             displayBeforeFocus = displays.focusedDisplay(window: lastFocused)?.uuid
-            let previous = dinky_window_info(lastFocused)
-            focusDeparture.changed(from: lastFocused, to: id, input: .current,
-                                   departed: !previous.exists || previous.isMinimized)
+            if !deferring {
+                let input = RefocusInput.current
+                let previous = dinky_window_info(lastFocused)
+                focusDeparture.changed(from: lastFocused, to: id, input: input,
+                                       departed: !previous.exists || previous.isMinimized)
+                if let refocus, !refocus.allows(keyboard: keyboardWindow(), input: input) { clearRefocus() }
+            }
             lastFocused = id
-            if let refocus, !refocus.allows(keyboard: keyboardWindow(), input: .current) { clearRefocus() }
             // Only a window takes focus from a display focused without one, not an app with no window here.
             if id != 0 { displays.focusOverride = nil }
             onFocusChange?()
         }
+        if deferring { return }
         focusing = nil
         guard let key = placements[id]?.space, workspaces[key]?.focused != id else { return }
         edit(key) { $0.focus(id) }
@@ -444,27 +448,19 @@ final class Coordinator {
 
     // MARK: Focus after a window leaves
 
-    func prepareFocusDeparture() {
-        let input = RefocusInput.current
-        // The key's recipient can be newer than syncFocus's last observation. This is WindowServer, not AX.
-        let id: WindowID
-        if let focusing, Date() < focusing.until { id = focusing.id }
-        else { id = focusedWindow }
-        focusDeparture.prepare(id, input: input)
-    }
-
     /// Capture ownership and input before tracking can block on AX or remove the window's placement.
     private func focusRepair(by window: Window, removed: Bool) -> FocusRepair? {
         let minimized = !removed && window.isMinimized && minimizedIDs.insert(window.id).inserted
         if removed || !window.isMinimized { minimizedIDs.remove(window.id) }
         defer { if removed || minimized { focusDeparture.forget(window.id) } }
+        guard removed || minimized else { return nil }
         let current = RefocusInput.current
-        guard removed || minimized, let placement = placements[window.id],
-              let input = focusDeparture.repairInput(for: window.id, focused: focusOwner, current: current),
+        guard let placement = placements[window.id],
+              focusDeparture.hadFocus(window.id, focused: focusOwner, input: current),
               let space = placement.space ?? (window.spaceID != 0 ? window.spaceID : nil)
                 ?? displays.display(containing: window.frame)?.currentSpaceID else { return nil }
         return FocusRepair(leaving: RefocusWindow(id: window.id, pid: window.pid, space: space,
-                                                  display: displays.display(containingSpace: space)?.uuid), input: input)
+                                                  display: displays.display(containingSpace: space)?.uuid), removed: removed, input: current)
     }
 
     /// A focus command takes precedence even when it focuses an empty display and never changes the key window.

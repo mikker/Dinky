@@ -4,8 +4,9 @@
 
 ### Fixes
 
-- When closing or minimizing the focused window leaves no key window or redirects the app's key window to another display, focus its workspace's next tile. A later key, click, pointer movement, focus command or Space switch takes precedence; tab drags do not pull focus back. (#69, thanks @ivanmilov)
+- When closing or minimizing the focused window leaves no key window, focus its workspace's next tile. A close also repairs a redirect of the app's key window to another display; a minimize leaves that redirect alone because its late notification cannot distinguish it from a user's click. A later key, click, focus command or Space switch takes precedence; tab drags do not pull focus back. Input is sampled at departure, not at the initiating shortcut, so delayed minimize notifications can follow an earlier Escape or desktop click. Hiding alone does not trigger repair. (#69, thanks @ivanmilov)
 - Layout stacking no longer unminimizes a window when a slow pass finishes during native minimization. (#69)
+- Native tab/pane closes and cancelled save/quit sheets no longer poison later window departures. Focus changes are still observed during dinky's focus grace period, and pointer jitter/scrolling no longer cancel pending repair. (#69)
 - `debug-state` no longer crashes dinky when WindowServer returns an unavailable frame during a close or minimize. (#69, thanks @ivanmilov)
 
 ## 0.24

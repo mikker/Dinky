@@ -6,8 +6,8 @@ struct FrameRaiseTests {
         #expect(!FrameApplier.mayRaise(minimized: true))
     }
 
-    @Test func anUnknownMinimizedStateCannotAuthorizeARaise() {
-        #expect(!FrameApplier.mayRaise(minimized: nil))
+    @Test func anUnsupportedOrMissingMinimizedStateStillAllowsStacking() {
+        #expect(FrameApplier.mayRaise(minimized: nil))
     }
 
     @Test func aKnownUnminimizedWindowCanStillBeStacked() {

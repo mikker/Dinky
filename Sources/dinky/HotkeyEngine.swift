@@ -13,8 +13,6 @@ final class HotkeyEngine {
     var enabled = true
     /// Called with the new mode's name and the previous one whenever the mode changes.
     var onModeChange: ((_ mode: String, _ previous: String) -> Void)?
-    /// Observe a native window command before returning it to the app. Must not make blocking AX calls.
-    var onWindowDeparture: (() -> Void)?
     private var tap: CFMachPort?
 
     /// `onCommands` is called on the main queue with the binding's commands, in order.
@@ -72,11 +70,7 @@ final class HotkeyEngine {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return Unmanaged.passUnretained(event)
         }
-        guard type == .keyDown else { return Unmanaged.passUnretained(event) }
-        guard let commands = commands(for: event) else {
-            if enabled, RefocusInput.isDepartureKey(event) { onWindowDeparture?() }
-            return Unmanaged.passUnretained(event)
-        }
+        guard type == .keyDown, let commands = commands(for: event) else { return Unmanaged.passUnretained(event) }
         // Run the commands after the callback returns, so slow commands never time the tap out.
         DispatchQueue.main.async { self.onCommands(commands) }
         return nil

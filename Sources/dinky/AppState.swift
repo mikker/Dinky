@@ -40,7 +40,6 @@ final class AppState {
     init(swipeFocus: SwipeFocus = SwipeFocus()) {
         self.swipeFocus = swipeFocus
         hotkeys.load(modes: config.modes, sides: config.modifiers)
-        hotkeys.onWindowDeparture = { [weak self] in self?.coordinator?.prepareFocusDeparture() }
     }
 
     /// Loads `~/.config/dinky/dinky.toml`, writing the default config there first if it is missing.
