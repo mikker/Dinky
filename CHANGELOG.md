@@ -9,6 +9,9 @@
 ### Fixes
 
 - Moving a focused floating window without `--follow` focuses a tiled window left on its source workspace, when there is one (#68, thanks @albertomalossi).
+### Fixes
+
+- Finder folders opened from the Desktop tile once their opening animation finishes, instead of staying floating until dinky restarts (#67, thanks @albertomalossi).
 
 ## 0.24
 

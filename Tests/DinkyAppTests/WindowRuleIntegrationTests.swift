@@ -126,4 +126,32 @@ struct WindowRuleIntegrationTests {
             #expect(owner.windowIdentifiers[window.id] == identifier)
         }
     }
+
+    @Test func finderFloatingRuleStillWinsAfterSettling() throws {
+        let owner = try coordinator("""
+        [[rules]]
+        app-id = 'com.apple.finder'
+        run = 'layout floating'
+        """)
+        let finder = Window(identity: .init(id: 900_067, pid: -1, firstSeen: .distantPast),
+                            appName: "Finder", bundleID: "com.apple.finder")
+        #expect(owner.awaitClassification(finder.id, unsettled: true, now: 100))
+        #expect(!owner.awaitClassification(finder.id, unsettled: false, now: 100.2))
+        let result = owner.classify(finder, kind: .normal, resizable: true, title: "Desktop folder",
+                                    identifier: "FinderWindow", lacksFullscreen: false) { _, _ in
+            Issue.record("A layout-only rule must not enqueue commands")
+        }
+        #expect(result.floating)
+        #expect(!result.runsRules)
+        #expect(owner.settlements.isEmpty)
+    }
+
+    @Test func establishedFloatingChoiceIsNotReclassified() throws {
+        let owner = try coordinator()
+        owner.placements[window.id] = Placement(floating: true, space: nil)
+        owner.track(window)
+        #expect(owner.placements[window.id]?.floating == true)
+        #expect(owner.settlements.isEmpty)
+        #expect(owner.windowIdentifiers.isEmpty)
+    }
 }

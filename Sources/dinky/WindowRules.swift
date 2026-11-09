@@ -4,30 +4,64 @@ import DinkyConfig
 
 // Window classification for the coordinator: the AX window kind, its fullscreen button and the config's `[[rules]]`.
 
+/// A real settling interval, independent of how many window events arrive during the opening animation.
+final class ClassificationSettlement {
+    let deadline: TimeInterval
+    /// An explicit layout command while AX is settling takes precedence over the eventual default or rule.
+    var floating: Bool?
+    init(now: TimeInterval) { deadline = now + 1 }
+    func isWaiting(at now: TimeInterval) -> Bool { now < deadline }
+}
+
 extension Coordinator {
-    /// Whether a window floats, and whether `[[rules]]` run commands for it, which then decide where it goes. Nil
-    /// while its AX element is not there yet (a retry is scheduled; after a few, the window floats since dinky
-    /// could not move it anyway).
+    /// Classify only once AX is usable or its settling interval expires. Rules run only on the final snapshot.
     func classify(_ window: Window) -> (floating: Bool, runsRules: Bool)? {
         guard let element = axWindow(pid: window.pid, wid: window.id, timeout: FrameApplier.timeout) else {
-            let tries = attempts[window.id, default: 0] + 1
-            attempts[window.id] = tries
-            guard tries < 5 else { return (true, false) }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                guard let self, let window = model.windows[window.id] else { return }
-                track(window)
-                flush()
-            }
-            return nil
+            return awaitClassification(window.id, unsettled: true) ? nil : (true, false)
         }
-        attempts[window.id] = nil
-        let kind = windowKind(subrole: axString(element, kAXSubroleAttribute))
+        let subrole = axString(element, kAXSubroleAttribute)
+        let kind = windowKind(subrole: subrole)
         var resizable: DarwinBoolean = false
         AXUIElementIsAttributeSettable(element, kAXSizeAttribute as CFString, &resizable)
         let title = axString(element, kAXTitleAttribute) ?? ""
         let identifier = axString(element, "AXIdentifier").flatMap { $0.isEmpty ? nil : $0 }
+        // Standard windows can briefly refuse resizing while opening. Known dialogs and panels need no wait.
+        if awaitClassification(window.id, unsettled: subrole == nil || (kind == .normal && !resizable.boolValue)) { return nil }
         return classify(window, kind: kind, resizable: resizable.boolValue, title: title, identifier: identifier,
                         lacksFullscreen: lacksFullscreen(element, bundleID: window.bundleID))
+    }
+
+    /// One deadline and one retry chain per window, shared by missing AX and incomplete AX facts.
+    func awaitClassification(_ id: UInt32, unsettled: Bool, now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Bool {
+        guard unsettled else {
+            settlements[id] = nil
+            return false
+        }
+        let settlement: ClassificationSettlement
+        if let pending = settlements[id] {
+            settlement = pending
+        } else {
+            settlement = ClassificationSettlement(now: now)
+            settlements[id] = settlement
+            retryClassification(id, settlement: settlement)
+        }
+        guard settlement.isWaiting(at: now) else {
+            settlements[id] = nil
+            return false
+        }
+        return true
+    }
+
+    private func retryClassification(_ id: UInt32, settlement: ClassificationSettlement) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self, weak settlement] in
+            guard let self, let settlement, settlements[id] === settlement,
+                  let window = model.windows[id] else { return }
+            track(window)
+            flush()
+            if settlements[id] === settlement, settlement.isWaiting(at: ProcessInfo.processInfo.systemUptime) {
+                retryClassification(id, settlement: settlement)
+            }
+        }
     }
 
     /// Applies the AX facts read above. Keep command scheduling separate from execution: a window must be

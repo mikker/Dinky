@@ -45,8 +45,8 @@ final class Coordinator {
     /// Counts overlapping full writes so an older completion cannot expose a newer pass's events.
     private var applying: [UInt64: Int] = [:]
     private var frameRecovery: [WindowID: FrameRecovery] = [:]
-    /// Classification attempts for windows whose AX element has not appeared yet.
-    var attempts: [WindowID: Int] = [:]
+    /// Windows waiting for their initial Accessibility state to settle. See WindowRules.swift.
+    var settlements: [WindowID: ClassificationSettlement] = [:]
     /// Newly shown windows at the exact frame of a tile of their app, held out of the trees for a moment in case
     /// they are a tab switch: by newcomer, the tile's window. See Tabs.swift.
     var heldTabs: [WindowID: WindowID] = [:]
@@ -354,9 +354,10 @@ final class Coordinator {
             // Turning tiling back on reconciles, which tracks them then.
             guard enabled, window.isNormal, isVisible(window.spaceID) else { return }
             // Once, on the first classification attempt, not again on its retries.
-            if attempts[window.id] == nil { noteFirstShowing(window) }
+            if settlements[window.id] == nil { noteFirstShowing(window) }
+            let settlement = settlements[window.id]
             guard let classification = classify(window) else { return }
-            placements[window.id] = Placement(floating: classification.floating, space: nil)
+            placements[window.id] = Placement(floating: settlement?.floating ?? classification.floating, space: nil)
             if !classification.runsRules, adopt(window) { return }
         }
         guard !adopting.contains(window.id), !placements[window.id]!.floating else { return }
@@ -376,7 +377,7 @@ final class Coordinator {
 
     func forget(_ id: WindowID) {
         windowIdentifiers[id] = nil
-        attempts[id] = nil
+        settlements[id] = nil
         adoptTargets[id] = nil
         adopting.remove(id)
         applier.forget(id)
