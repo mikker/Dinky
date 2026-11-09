@@ -84,12 +84,13 @@ One window has focus, and its border says so. `focus left` and friends move it
 to the nearest window that way; with `--boundaries all-monitors-outer-frame`,
 across the display edge too. [`[focus-follows-mouse]`](configuration.md#focus-follows-mouse)
 moves it with the pointer instead. When the focused window closes or is minimized
-and macOS leaves no key window, focus goes to its workspace's next tile, the same
-one shown by an accordion or focused after moving a window away. This also applies
-when hiding or quitting the focused app leaves no key window. Existing keyboard
-focus on either display is left alone; a later click, focus command or Space
-switch takes precedence. Empty workspaces and native full-screen Spaces have no
-tile to focus.
+and macOS leaves no key window, or redirects the same app's key window to another
+display, focus goes to its workspace's next tile. It is the same one shown by an
+accordion or focused after moving a window away. This also applies when hiding or
+quitting the focused app leaves no key window. A later key, click, pointer movement,
+focus command or Space switch takes precedence; dragging and merging tabs does not
+pull focus back. Another app's key window, or a key window on the original display,
+is left alone. Empty workspaces and native full-screen Spaces have no tile to focus.
 
 ## Rule
 

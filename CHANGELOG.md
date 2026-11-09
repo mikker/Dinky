@@ -4,7 +4,8 @@
 
 ### Fixes
 
-- When closing or minimizing the focused window leaves no key window, focus its workspace's next tile. A later focus command, click or Space switch takes precedence. Existing keyboard focus, including on another display, is left alone. (#69, thanks @ivanmilov)
+- When closing or minimizing the focused window leaves no key window or redirects the app's key window to another display, focus its workspace's next tile. A later key, click, pointer movement, focus command or Space switch takes precedence; tab drags do not pull focus back. (#69, thanks @ivanmilov)
+- Layout stacking no longer unminimizes a window when a slow pass finishes during native minimization. (#69)
 - `debug-state` no longer crashes dinky when WindowServer returns an unavailable frame during a close or minimize. (#69, thanks @ivanmilov)
 
 ## 0.24

@@ -76,7 +76,7 @@ final class Coordinator {
     private var minimizedIDs: Set<WindowID> = []
     /// The check that focuses another window after the focused one closed or was minimized. See `scheduleRefocus`.
     private var refocusCheck: DispatchWorkItem?
-    private var refocusLeaving: WindowID?
+    private var refocus: FocusRepair?
     /// Trees to place without gliding the next time they are applied: after displays come or go, apps have
     /// moved the windows of Spaces that were not on screen to frames of their own, and a glide from there
     /// would only show the mess.
@@ -162,9 +162,9 @@ final class Coordinator {
         }
         borders?.handle(event)
         if let window = event.window {
-            let left = spaceLeft(by: window, removed: event.change == .removed)
+            let departure = focusRepair(by: window, removed: event.change == .removed)
             event.change == .removed ? forget(window.id) : track(window)
-            if let left { scheduleRefocus(on: left, leaving: window.id) }
+            if let departure { scheduleRefocus(departure) }
             if [.windowMove, .windowResize].contains(event.kind) {
                 noteFrameChange(of: window.id)
                 recoverFrame(of: window.id)
@@ -407,6 +407,11 @@ final class Coordinator {
     /// The front app's frontmost document window on a current Space.
     var focusedWindow: WindowID { dinky_border_focused_window() }
 
+    private var focusOwner: WindowID {
+        if let focusing, Date() < focusing.until { return focusing.id }
+        return lastFocused
+    }
+
     /// Focuses a window, raising it and activating its app. For a moment after, focus events that still
     /// report the previous window are ignored, so they do not pull the trees back to it.
     func focus(_ id: WindowID) {
@@ -419,17 +424,19 @@ final class Coordinator {
     /// Follows focus into the trees, so new windows land beside the focused one and accordions show it.
     private func syncFocus() {
         let id = focusedWindow
+        if let focusing, focusing.id != id, Date() < focusing.until { return }
         if id != lastFocused {
             // Before the override goes: a new window can take focus before it shows. See Adoption.swift.
             displayBeforeFocus = displays.focusedDisplay(window: lastFocused)?.uuid
-            focusDeparture.changed(from: lastFocused, to: id, input: .current)
+            let previous = dinky_window_info(lastFocused)
+            focusDeparture.changed(from: lastFocused, to: id, input: .current,
+                                   departed: !previous.exists || previous.isMinimized)
             lastFocused = id
-            if id != 0, id != refocusLeaving { cancelRefocus() }
+            if let refocus, !refocus.allows(keyboard: keyboardWindow(), input: .current) { clearRefocus() }
             // Only a window takes focus from a display focused without one, not an app with no window here.
             if id != 0 { displays.focusOverride = nil }
             onFocusChange?()
         }
-        if let focusing, focusing.id != id, Date() < focusing.until { return }
         focusing = nil
         guard let key = placements[id]?.space, workspaces[key]?.focused != id else { return }
         edit(key) { $0.focus(id) }
@@ -437,50 +444,69 @@ final class Coordinator {
 
     // MARK: Focus after a window leaves
 
-    /// The Space a window dinky manages leaves with focus, by closing or being minimized; nil when it does not.
-    /// Call before the event is tracked, while the window's placement still names its tree.
-    private func spaceLeft(by window: Window, removed: Bool) -> UInt64? {
+    func prepareFocusDeparture() {
+        let input = RefocusInput.current
+        // The key's recipient can be newer than syncFocus's last observation. This is WindowServer, not AX.
+        let id: WindowID
+        if let focusing, Date() < focusing.until { id = focusing.id }
+        else { id = focusedWindow }
+        focusDeparture.prepare(id, input: input)
+    }
+
+    /// Capture ownership and input before tracking can block on AX or remove the window's placement.
+    private func focusRepair(by window: Window, removed: Bool) -> FocusRepair? {
         let minimized = !removed && window.isMinimized && minimizedIDs.insert(window.id).inserted
         if removed || !window.isMinimized { minimizedIDs.remove(window.id) }
+        defer { if removed || minimized { focusDeparture.forget(window.id) } }
+        let current = RefocusInput.current
         guard removed || minimized, let placement = placements[window.id],
-              focusDeparture.hadFocus(window.id, focused: lastFocused, input: .current) else { return nil }
-        if let space = placement.space ?? (window.spaceID != 0 ? window.spaceID : nil) { return space }
-        return displays.display(containing: window.frame)?.currentSpaceID
+              let input = focusDeparture.repairInput(for: window.id, focused: focusOwner, current: current),
+              let space = placement.space ?? (window.spaceID != 0 ? window.spaceID : nil)
+                ?? displays.display(containing: window.frame)?.currentSpaceID else { return nil }
+        return FocusRepair(leaving: RefocusWindow(id: window.id, pid: window.pid, space: space,
+                                                  display: displays.display(containingSpace: space)?.uuid), input: input)
     }
 
     /// A focus command takes precedence even when it focuses an empty display and never changes the key window.
     func cancelRefocus() {
+        clearRefocus()
+        focusDeparture.cancel(focused: lastFocused, input: .current)
+    }
+
+    private func clearRefocus() {
         refocusCheck?.cancel()
         refocusCheck = nil
-        refocusLeaving = nil
-        focusDeparture = FocusDeparture()
+        refocus = nil
+    }
+
+    private func keyboardWindow() -> RefocusWindow? {
+        guard let id = keyboardWindowID() else { return nil }
+        let space = dinky_window_space_id(id)
+        return RefocusWindow(id: id, pid: dinky_window_info(id).pid, space: space,
+                             display: isVisible(space) ? displays.display(containingSpace: space)?.uuid : nil)
     }
 
     /// Use the same successor as move-away and the layout's stacking. AX can still name the closing window when
-    /// its WindowServer event arrives, so allow macOS one short settling interval. Any later input, focus change,
-    /// focus command or display/Space change invalidates the check; this is not a delayed focus command.
-    private func scheduleRefocus(on space: UInt64, leaving id: WindowID) {
-        cancelRefocus()
+    /// its WindowServer event arrives, so allow macOS one short settling interval. New input, an unrelated key
+    /// window, a focus command or display/Space change invalidates it; this is not a delayed focus command.
+    private func scheduleRefocus(_ request: FocusRepair) {
+        clearRefocus()
+        let id = request.leaving.id, space = request.leaving.space
         guard dragging == nil, !CGEventSource.buttonState(.combinedSessionState, button: .left),
               let successor = workspaces[space]?.focused, successor != id else { return }
-        // A valid key window on another Space may be the destination of a tab merge or a click. Never infer
-        // that an existing key window is wrong merely because a recently focused window closed elsewhere.
-        if let key = keyboardWindowID(), key != 0, key != id { return }
-        let input = RefocusInput.current
-        refocusLeaving = id
+        refocus = request
         let check = DispatchWorkItem { [weak self] in
-            guard let self, refocusLeaving == id else { return }
+            guard let self, refocus == request else { return }
             refocusCheck = nil
-            refocusLeaving = nil
+            refocus = nil
             guard enabled, !MissionControl.shared.active, isVisible(space), displays.focusOverride == nil,
                   !CGEventSource.buttonState(.combinedSessionState, button: .left),
                   let target = workspaces[space]?.focused, target != id,
                   model.windows[target]?.isNormal == true else { return }
-            // If macOS or the user supplied any key window, it wins, on either display.
-            guard input.allowsRepair(leaving: id, keyboard: keyboardWindowID(), input: .current),
+            guard request.allows(keyboard: keyboardWindow(), input: .current),
                   let pid = model.windows[target]?.pid,
                   let app = NSRunningApplication(processIdentifier: pid), !app.isHidden, !app.isTerminated else { return }
-            print("\(stamp()) focus: \(id) left Space \(space) without keyboard focus, focused \(target)")
+            print("\(stamp()) focus: \(id) left Space \(space), focused \(target)")
             fflush(stdout)
             focus(target)
         }
