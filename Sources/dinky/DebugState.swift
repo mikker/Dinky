@@ -23,7 +23,7 @@ extension Coordinator {
             "focused": focusedWindow,
             "displays": displays.displays.map { d in
                 ["uuid": d.uuid, "current-space": d.currentSpaceID, "spaces": d.spaces, "user-spaces": d.userSpaces,
-                 "visible-area": json(d.visibleArea)] as [String: Any]
+                 "visible-area": debugFrame(d.visibleArea)] as [String: Any]
             },
             "workspaces": Dictionary(uniqueKeysWithValues: numbers.map { ("\($0.key)", $0.value) }),
             "trees": workspaces.map { key, workspace in
@@ -34,7 +34,7 @@ extension Coordinator {
                     "windows": workspace.windows,
                     "focused": workspace.focused ?? 0,
                     "fullscreen": workspace.fullscreen ?? 0,
-                    "expected": Dictionary(uniqueKeysWithValues: layout.frames.map { ("\($0.key)", json($0.value)) }),
+                    "expected": Dictionary(uniqueKeysWithValues: layout.frames.map { ("\($0.key)", debugFrame($0.value)) }),
                 ] as [String: Any]
             },
             "placements": placements.map { id, placement in
@@ -50,9 +50,9 @@ extension Coordinator {
                 return [
                     "id": w.id, "pid": w.pid, "app": w.appName ?? "", "bundle-id": w.bundleID ?? "",
                     "window-identifier": windowIdentifiers[w.id].map { $0 as Any } ?? NSNull(),
-                    "frame": json(w.frame), "space": w.spaceID, "normal": w.isNormal, "minimized": w.isMinimized,
+                    "frame": debugFrame(w.frame), "space": w.spaceID, "normal": w.isNormal, "minimized": w.isMinimized,
                     "hidden": isHidden(w.pid),
-                    "live-frame": live.exists ? json(live.frame) : [], "live-space": dinky_window_space_id(w.id),
+                    "live-frame": live.exists ? debugFrame(live.frame) : [], "live-space": dinky_window_space_id(w.id),
                 ] as [String: Any]
             },
         ]
@@ -61,4 +61,9 @@ extension Coordinator {
     }
 }
 
-private func json(_ r: CGRect) -> [CGFloat] { [r.minX, r.minY, r.width, r.height] }
+/// Missing and transient WindowServer frames use the same empty array, never non-JSON floating-point values.
+func debugFrame(_ rect: CGRect) -> [CGFloat] {
+    guard !rect.isNull, !rect.isInfinite else { return [] }
+    let values = [rect.minX, rect.minY, rect.width, rect.height]
+    return values.allSatisfy(\.isFinite) ? values : []
+}

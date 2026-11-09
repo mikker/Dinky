@@ -48,10 +48,22 @@ func mainWindowID(of pid: pid_t) -> UInt32 {
 /// The frontmost app's focused window, 0 if none. Asked on the main thread every half second, so bounded as
 /// `mainWindowID` is: a hung app must not stall the key tap.
 func frontWindowID() -> UInt32 {
-    guard let app = NSWorkspace.shared.frontmostApplication else { return 0 }
+    keyboardWindowID() ?? 0
+}
+
+/// Unlike the query convenience above, a focus repair must distinguish no key window from a failed AX read.
+/// nil means unknown, not permission to activate another app.
+func keyboardWindowID() -> UInt32? {
+    guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
     let element = AXUIElementCreateApplication(app.processIdentifier)
     AXUIElementSetMessagingTimeout(element, 0.25)
-    return axElement(element, kAXFocusedWindowAttribute).map(axWindowID) ?? 0
+    var value: CFTypeRef?
+    let error = AXUIElementCopyAttributeValue(element, kAXFocusedWindowAttribute as CFString, &value)
+    if error == .noValue { return 0 }
+    guard error == .success, let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+    var id: UInt32 = 0
+    guard _AXUIElementGetWindow(value as! AXUIElement, &id) == .success else { return nil }
+    return id
 }
 
 /// Focuses a window on a Space that is on screen: AX raise, then activate its app. Never switches Spaces:

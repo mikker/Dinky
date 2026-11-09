@@ -19,7 +19,7 @@ final class Coordinator {
     var enabled = true {
         didSet {
             applier.updateLayoutState(enabled: enabled, overview: MissionControl.shared.active)
-            if !enabled { animator.cancel(); cancelDrag() }
+            if !enabled { animator.cancel(); cancelDrag(); cancelRefocus() }
             if enabled != oldValue { updateBorders() }
             if enabled, !oldValue {
                 enabledSince = Date()
@@ -70,6 +70,13 @@ final class Coordinator {
     private(set) var displayBeforeFocus: String?
     /// A window dinky just focused, and until when focus reads that disagree are taken as stale.
     private var focusing: (id: WindowID, until: Date)?
+    /// A focus loss to no window remains attributable until another window or user input supersedes it.
+    private var focusDeparture = FocusDeparture()
+    /// Windows last seen minimized, so only the moment a window is minimized counts as it leaving its Space.
+    private var minimizedIDs: Set<WindowID> = []
+    /// The check that focuses another window after the focused one closed or was minimized. See `scheduleRefocus`.
+    private var refocusCheck: DispatchWorkItem?
+    private var refocus: FocusRepair?
     /// Trees to place without gliding the next time they are applied: after displays come or go, apps have
     /// moved the windows of Spaces that were not on screen to frames of their own, and a glide from there
     /// would only show the mess.
@@ -91,6 +98,10 @@ final class Coordinator {
         var known = displays.displays
         displays.observe { [weak self] displays in
             guard let self else { return }
+            // Minimizing can change the Dock's visible area without changing the display or Space.
+            if known.map(\.uuid) != displays.displays.map(\.uuid)
+                || known.map(\.frame) != displays.displays.map(\.frame)
+                || known.map(\.currentSpaceID) != displays.displays.map(\.currentSpaceID) { cancelRefocus() }
             borders?.spacesChanged(displays.displays)
             let before = known
             known = displays.displays
@@ -151,7 +162,9 @@ final class Coordinator {
         }
         borders?.handle(event)
         if let window = event.window {
+            let departure = focusRepair(by: window, removed: event.change == .removed)
             event.change == .removed ? forget(window.id) : track(window)
+            if let departure { scheduleRefocus(departure) }
             if [.windowMove, .windowResize].contains(event.kind) {
                 noteFrameChange(of: window.id)
                 recoverFrame(of: window.id)
@@ -385,6 +398,8 @@ final class Coordinator {
         frameRecovery[id] = nil
         heldTabs[id] = nil
         notTabs.remove(id)
+        minimizedIDs.remove(id)
+        focusDeparture.forget(id)
         guard let placement = placements.removeValue(forKey: id), let space = placement.space,
               !takeOverTile(of: id, in: space) else { return }
         edit(space) { $0.remove(id) }
@@ -393,9 +408,15 @@ final class Coordinator {
     /// The front app's frontmost document window on a current Space.
     var focusedWindow: WindowID { dinky_border_focused_window() }
 
+    private var focusOwner: WindowID {
+        if let focusing, Date() < focusing.until { return focusing.id }
+        return lastFocused
+    }
+
     /// Focuses a window, raising it and activating its app. For a moment after, focus events that still
     /// report the previous window are ignored, so they do not pull the trees back to it.
     func focus(_ id: WindowID) {
+        cancelRefocus()
         guard let window = model.windows[id] else { return }
         focusing = (id, Date() + 0.5)
         focusWindow(pid: window.pid, id: id)
@@ -404,18 +425,90 @@ final class Coordinator {
     /// Follows focus into the trees, so new windows land beside the focused one and accordions show it.
     private func syncFocus() {
         let id = focusedWindow
+        let deferring = focusing.map { $0.id != id && Date() < $0.until } ?? false
         if id != lastFocused {
             // Before the override goes: a new window can take focus before it shows. See Adoption.swift.
             displayBeforeFocus = displays.focusedDisplay(window: lastFocused)?.uuid
+            if !deferring {
+                let input = RefocusInput.current
+                let previous = dinky_window_info(lastFocused)
+                focusDeparture.changed(from: lastFocused, to: id, input: input,
+                                       departed: !previous.exists || previous.isMinimized)
+                if let refocus, !refocus.allows(keyboard: keyboardWindow(), input: input) { clearRefocus() }
+            }
             lastFocused = id
             // Only a window takes focus from a display focused without one, not an app with no window here.
             if id != 0 { displays.focusOverride = nil }
             onFocusChange?()
         }
-        if let focusing, focusing.id != id, Date() < focusing.until { return }
+        if deferring { return }
         focusing = nil
         guard let key = placements[id]?.space, workspaces[key]?.focused != id else { return }
         edit(key) { $0.focus(id) }
+    }
+
+    // MARK: Focus after a window leaves
+
+    /// Capture ownership and input before tracking can block on AX or remove the window's placement.
+    private func focusRepair(by window: Window, removed: Bool) -> FocusRepair? {
+        let minimized = !removed && window.isMinimized && minimizedIDs.insert(window.id).inserted
+        if removed || !window.isMinimized { minimizedIDs.remove(window.id) }
+        defer { if removed || minimized { focusDeparture.forget(window.id) } }
+        guard removed || minimized else { return nil }
+        let current = RefocusInput.current
+        guard let placement = placements[window.id],
+              focusDeparture.hadFocus(window.id, focused: focusOwner, input: current),
+              let space = placement.space ?? (window.spaceID != 0 ? window.spaceID : nil)
+                ?? displays.display(containing: window.frame)?.currentSpaceID else { return nil }
+        return FocusRepair(leaving: RefocusWindow(id: window.id, pid: window.pid, space: space,
+                                                  display: displays.display(containingSpace: space)?.uuid), removed: removed, input: current)
+    }
+
+    /// A focus command takes precedence even when it focuses an empty display and never changes the key window.
+    func cancelRefocus() {
+        clearRefocus()
+        focusDeparture.cancel(focused: lastFocused, input: .current)
+    }
+
+    private func clearRefocus() {
+        refocusCheck?.cancel()
+        refocusCheck = nil
+        refocus = nil
+    }
+
+    private func keyboardWindow() -> RefocusWindow? {
+        guard let id = keyboardWindowID() else { return nil }
+        let space = dinky_window_space_id(id)
+        return RefocusWindow(id: id, pid: dinky_window_info(id).pid, space: space,
+                             display: isVisible(space) ? displays.display(containingSpace: space)?.uuid : nil)
+    }
+
+    /// Use the same successor as move-away and the layout's stacking. AX can still name the closing window when
+    /// its WindowServer event arrives, so allow macOS one short settling interval. New input, an unrelated key
+    /// window, a focus command or display/Space change invalidates it; this is not a delayed focus command.
+    private func scheduleRefocus(_ request: FocusRepair) {
+        clearRefocus()
+        let id = request.leaving.id, space = request.leaving.space
+        guard dragging == nil, !CGEventSource.buttonState(.combinedSessionState, button: .left),
+              let successor = workspaces[space]?.focused, successor != id else { return }
+        refocus = request
+        let check = DispatchWorkItem { [weak self] in
+            guard let self, refocus == request else { return }
+            refocusCheck = nil
+            refocus = nil
+            guard enabled, !MissionControl.shared.active, isVisible(space), displays.focusOverride == nil,
+                  !CGEventSource.buttonState(.combinedSessionState, button: .left),
+                  let target = workspaces[space]?.focused, target != id,
+                  model.windows[target]?.isNormal == true else { return }
+            guard request.allows(keyboard: keyboardWindow(), input: .current),
+                  let pid = model.windows[target]?.pid,
+                  let app = NSRunningApplication(processIdentifier: pid), !app.isHidden, !app.isTerminated else { return }
+            print("\(stamp()) focus: \(id) left Space \(space), focused \(target)")
+            fflush(stdout)
+            focus(target)
+        }
+        refocusCheck = check
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(150), execute: check)
     }
 
     /// The tree of a user Space, numbered workspace or not, created on first use. Nil for full-screen Spaces.
