@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Finder folders opened from the Desktop tile once their opening animation finishes, instead of staying floating until dinky restarts (#67, thanks @albertomalossi).
+
 ## 0.24
 
 **Upgrading scripts:** Raw socket clients must close their writing half after sending a request; a newline no longer submits it. The normal CLI and macOS `nc` already do this. The CLI now rejects replies over 1 MiB: narrow large list queries with filters or `--format`, or use a raw socket client for larger replies.

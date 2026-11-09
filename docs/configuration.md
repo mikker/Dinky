@@ -450,6 +450,11 @@ A rule that is exactly `layout floating` or `layout tiling` decides before the
 window is placed, the last one winning. Every other rule command runs once the
 window is placed, on that window.
 
+New windows that have not yet exposed their Accessibility window or resize
+capability get up to a second to settle before dinky decides. This lets Finder
+folders opened from the Desktop tile normally. Rules run once, after that wait;
+fixed-size windows still float.
+
 New windows open on the focused display, whichever display the app picked. A
 rule that moves the window, such as `move-window-to-workspace`, decides where
 it goes instead.
