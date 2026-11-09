@@ -27,6 +27,16 @@ enum Dispatcher {
                   AppState.shared.numbers.number(of: dinky_window_space_id(id)) != nil else {
                 return .error("window \(id) is not a managed window on a numbered workspace; see `dinky list-windows --all`")
             }
+            // Only an explicit ID changes relative workspace semantics. Rules already supply an implicit
+            // window override and retain their focused-display targets.
+            if case .moveWindowToWorkspace(let target, let follow) = command {
+                do {
+                    let n = try resolve(target, relativeTo: dinky_window_space_id(id))
+                    return run(.moveWindowToWorkspace(.number(n), follow: follow), window: id, env: env)
+                } catch {
+                    return error.reply
+                }
+            }
             return run(command, window: id, env: env)
         case .workspace(let target):
             return switchWorkspace(target)
@@ -38,7 +48,7 @@ enum Dispatcher {
             }
             return switchWorkspace(.number(n))
         case .moveWindowToWorkspace(let target, let follow):
-            return moveWindowToWorkspace(target, follow: follow, window: window)
+            return moveWindowToWorkspace(target, follow: follow, window: window ?? focusedWindowID())
         case .moveWindowToDisplay(let target, let follow):
             return moveWindowToDisplay(target, follow: follow, window: window ?? focusedWindowID())
         case .focus(let direction, let boundaries, let action):
@@ -116,7 +126,7 @@ enum Dispatcher {
         init(_ text: String) { reply = .error(text) }
     }
 
-    /// Relative targets step from an overridden window's Space, or from the focused display's current or
+    /// Relative targets step from an explicitly selected window's Space, or from the focused display's current or
     /// pending workspace so rapid requests add up. Neither wraps nor crosses displays.
     private static func resolve(_ target: WorkspaceTarget, relativeTo space: UInt64? = nil) throws(Refusal) -> Int {
         let model = AppState.shared.displays
@@ -174,11 +184,10 @@ enum Dispatcher {
         return .ok("workspace \(n)")
     }
 
-    private static func moveWindowToWorkspace(_ target: WorkspaceTarget, follow: Bool, window: WindowID?) -> Reply {
-        let wid = window ?? focusedWindowID()
+    private static func moveWindowToWorkspace(_ target: WorkspaceTarget, follow: Bool, window wid: WindowID) -> Reply {
         let n: Int
         do {
-            n = try resolve(target, relativeTo: window.map { dinky_window_space_id($0) })
+            n = try resolve(target)
         } catch {
             return error.reply
         }
