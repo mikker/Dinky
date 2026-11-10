@@ -4,7 +4,7 @@
 
 ### Key bindings
 
-- A binding can be a table, `{ command = '...', exclude-apps = ['<bundle id>'] }`. In an excluded app dinky leaves the key to the app, so terminals with their own `ctrl-hjkl` pane navigation keep it (#66, thanks @ChrisGVE).
+- A key binding can be a table, `{ command = 'focus left', exclude-apps = ['com.mitchellh.ghostty'] }`. While an excluded app is frontmost, dinky leaves the key to it, so terminals with their own `ctrl-hjkl` pane navigation keep it (#66, thanks @ChrisGVE).
 
 ### Fixes
 

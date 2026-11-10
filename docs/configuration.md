@@ -523,9 +523,10 @@ usual floating behavior.
 ## `[mode.<name>]`
 
 Key bindings. dinky starts in `main`; `mode <name>` switches. Each key maps to
-a command or a list of commands. Bound keys are swallowed. A table binding can
-exclude exact app bundle IDs, passing the key through to those apps; this is
-useful for terminals that use `ctrl-hjkl` for their own panes.
+a command or a list of commands. Bound keys are swallowed. A key can also map
+to a table with `command` and `exclude-apps`, a list of bundle IDs: while one
+of those apps is frontmost, dinky leaves the key to it. Terminals that use
+`ctrl-hjkl` for their own panes keep it that way.
 
 ```toml
 [mode.main]
