@@ -154,7 +154,7 @@ struct ParseTests {
         #expect(try parse("  workspace   2 \n") == .workspace(.number(2)))
     }
 
-    private static let defaultBindings = Config.default.modes.values.flatMap { $0.bindings.values.flatMap { $0 } }
+    private static let defaultBindings = Config.default.modes.values.flatMap { $0.bindings.values.flatMap(\.commands) }
 
     @Test func `Default config has bindings`() {
         #expect(!Self.defaultBindings.isEmpty)

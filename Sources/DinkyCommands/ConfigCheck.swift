@@ -28,8 +28,8 @@ public func checkConfig(_ config: Config) -> [ConfigFinding] {
         findings.append(.init(level: .warning, message: "no [mode.main]: no key bindings are active"))
     }
     for (name, mode) in config.modes.sorted(by: { $0.key < $1.key }) {
-        for (combo, commands) in mode.bindings.sorted(by: { $0.key.description < $1.key.description }) {
-            check(commands, at: "mode.\(name).\(combo)")
+        for (combo, binding) in mode.bindings.sorted(by: { $0.key.description < $1.key.description }) {
+            check(binding.commands, at: "mode.\(name).\(combo)")
         }
     }
     for (i, rule) in config.rules.enumerated() {

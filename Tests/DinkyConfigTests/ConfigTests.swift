@@ -26,15 +26,15 @@ struct ConfigTests {
         #expect(config.rules[0].run == ["layout floating"])
         #expect(Set(config.modes.keys) == ["main", "service"])
         let main = config.modes["main"]!.bindings
-        #expect(try main[KeyCombo("ctrl-left")] == ["workspace prev"])
-        #expect(try main[KeyCombo("alt-9")] == ["workspace 9"])
-        #expect(try main[KeyCombo("alt-shift-9")] == ["move-window-to-workspace 9"])
-        #expect(try main[KeyCombo("alt-k")] == ["focus up"])
-        #expect(try main[KeyCombo("alt-shift-l")] == ["move right"])
-        #expect(try main[KeyCombo("alt-shift-semicolon")] == ["mode service"])
+        #expect(try main[KeyCombo("ctrl-left")]?.commands == ["workspace prev"])
+        #expect(try main[KeyCombo("alt-9")]?.commands == ["workspace 9"])
+        #expect(try main[KeyCombo("alt-shift-9")]?.commands == ["move-window-to-workspace 9"])
+        #expect(try main[KeyCombo("alt-k")]?.commands == ["focus up"])
+        #expect(try main[KeyCombo("alt-shift-l")]?.commands == ["move right"])
+        #expect(try main[KeyCombo("alt-shift-semicolon")]?.commands == ["mode service"])
         #expect(main.count == 37)
-        #expect(try config.modes["service"]!.bindings[KeyCombo("esc")] == ["reload-config", "mode main"])
-        #expect(try config.modes["service"]!.bindings[KeyCombo("alt-shift-j")] == ["join-with down", "mode main"])
+        #expect(try config.modes["service"]!.bindings[KeyCombo("esc")]?.commands == ["reload-config", "mode main"])
+        #expect(try config.modes["service"]!.bindings[KeyCombo("alt-shift-j")]?.commands == ["join-with down", "mode main"])
     }
 
     @Test func `Shipped file is the defaults plus rules and bindings`() throws {
@@ -370,27 +370,22 @@ struct ConfigTests {
         [mode.resize]
         minus = 'resize smart -50'
         """)
-        let bindings = config.modes["main"]!.bindings
-        #expect(bindings[KeyCombo(modifiers: .alt, key: "a")] == ["workspace 1"])
-        #expect(bindings[KeyCombo(modifiers: .alt, key: "b")] == ["layout floating", "mode main"])
-        #expect(bindings[KeyCombo(modifiers: .ctrl, key: "h")] == ["focus left --wrap-around"])
-        #expect(config.modes["main"]!.excludedApps[KeyCombo(modifiers: .ctrl, key: "h")] == ["com.github.wez.wezterm", "com.mitchellh.ghostty"])
-        #expect(config.modes["main"]!.bindings[KeyCombo(modifiers: .ctrl, key: "j")] == ["focus down", "retile"])
-        #expect(config.modes["main"]!.excludedApps[KeyCombo(modifiers: .ctrl, key: "j")] == nil)
-        #expect(config.modes["main"]!.bindings[KeyCombo(modifiers: .ctrl, key: "k")] == ["focus up"])
-        #expect(config.modes["resize"]!.bindings[KeyCombo(key: "minus")] == ["resize smart -50"])
+        let main = config.modes["main"]!.bindings
+        #expect(main[KeyCombo(modifiers: .alt, key: "a")] == KeyBinding(["workspace 1"]))
+        #expect(main[KeyCombo(modifiers: .alt, key: "b")] == KeyBinding(["layout floating", "mode main"]))
+        #expect(main[KeyCombo(modifiers: .ctrl, key: "h")] == KeyBinding(["focus left --wrap-around"],
+                                                                         excludeApps: ["com.github.wez.wezterm", "com.mitchellh.ghostty"]))
+        #expect(main[KeyCombo(modifiers: .ctrl, key: "j")] == KeyBinding(["focus down", "retile"]))
+        #expect(main[KeyCombo(modifiers: .ctrl, key: "k")] == KeyBinding(["focus up"]))
+        #expect(config.modes["resize"]!.bindings[KeyCombo(key: "minus")] == KeyBinding(["resize smart -50"]))
     }
 
-    @Test func `Binding exclusions`() throws {
-        let mode = try Config.parse("""
-        [mode.main]
-        ctrl-h = { command = 'focus left', exclude-apps = ['com.example.Terminal'] }
-        """).modes["main"]!
-        let combo = KeyCombo(modifiers: .ctrl, key: "h")
-        #expect(mode.commands(for: combo, frontApp: "com.example.Terminal") == nil)
-        #expect(mode.commands(for: combo, frontApp: "com.apple.TextEdit") == ["focus left"])
-        #expect(mode.commands(for: combo, frontApp: nil) == ["focus left"])
-        #expect(mode.commands(for: KeyCombo(key: "a"), frontApp: nil) == nil)
+    @Test func `Binding exclusions`() {
+        let binding = KeyBinding(["focus left"], excludeApps: ["com.example.Terminal"])
+        #expect(!binding.applies(to: "com.example.Terminal"))
+        #expect(binding.applies(to: "com.apple.TextEdit"))
+        #expect(binding.applies(to: nil))
+        #expect(KeyBinding(["focus left"]).applies(to: "com.example.Terminal"))
     }
 
     @Test func `Bad binding values fail`() {

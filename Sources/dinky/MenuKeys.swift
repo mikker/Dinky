@@ -43,8 +43,9 @@ struct MenuBindings {
 
     init(_ mode: Mode?) {
         bindings = (mode?.bindings ?? [:])
-            .map { combo, commands in
-                (combo, commands, commands.count == 1 ? try? Command.parse(commands[0]) : nil)
+            .map { combo, binding in
+                let commands = binding.commands
+                return (combo, commands, commands.count == 1 ? try? Command.parse(commands[0]) : nil)
             }
             .sorted { $0.combo.description < $1.combo.description }
     }

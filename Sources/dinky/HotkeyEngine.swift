@@ -9,11 +9,7 @@ import Foundation
 /// calls `setMode`.
 final class HotkeyEngine {
     private let onCommands: ([String]) -> Void
-    private struct ModeBindings {
-        let mode: Mode
-        let combos: [KeyPress: KeyCombo]
-    }
-    private var modes: [String: ModeBindings] = [:]
+    private var modes: [String: [KeyPress: KeyBinding]] = [:]
     private var sides = ModifierSides()
     private(set) var currentMode = "main"
     var enabled = true
@@ -30,9 +26,7 @@ final class HotkeyEngine {
     func load(modes: [String: Mode], sides: ModifierSides) {
         self.sides = sides
         self.modes = modes.mapValues { mode in
-            ModeBindings(mode: mode, combos: Dictionary(uniqueKeysWithValues: mode.bindings.map {
-                (KeyPress($0.key), $0.key)
-            }))
+            Dictionary(uniqueKeysWithValues: mode.bindings.map { (KeyPress($0.key), $0.value) })
         }
         enter("main")
     }
@@ -70,11 +64,9 @@ final class HotkeyEngine {
     /// The commands bound to this event in the current mode, if dinky should take it.
     fileprivate func commands(for event: CGEvent) -> [String]? {
         guard enabled, let press = KeyPress(event, sides: sides) else { return nil }
-        guard let mode = modes[currentMode], let combo = mode.combos[press] else { return nil }
-        let frontApp = mode.mode.excludedApps[combo] == nil
-            ? nil
-            : NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        return mode.mode.commands(for: combo, frontApp: frontApp)
+        guard let binding = modes[currentMode]?[press],
+              binding.applies(to: NSWorkspace.shared.frontmostApplication?.bundleIdentifier) else { return nil }
+        return binding.commands
     }
 
     fileprivate func handle(_ type: CGEventType, _ event: CGEvent) -> Unmanaged<CGEvent>? {
