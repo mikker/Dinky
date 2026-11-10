@@ -228,6 +228,16 @@ final class FrameApplier {
         }
     }
 
+    /// The window's Accessibility title, nil when it has no element or the app does not answer. Through the cached
+    /// element, so a window laid out on another Space still answers, which a fresh lookup there would not.
+    func title(pid: pid_t, id: WindowID) -> String? {
+        withElement(pid: pid, id: id) { element -> (String?, AXError) in
+            var value: CFTypeRef?
+            let error = AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &value)
+            return (value as? String, error)
+        } ?? nil
+    }
+
     /// Runs `body` on the window's element, cached by window. An app can replace a window's element while the
     /// window lives on, same id and all: Slack hides its window on close and hands out a new element when it is
     /// reopened. So when the app calls the cached element invalid, it is looked up again and `body` runs once more.

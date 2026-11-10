@@ -156,6 +156,10 @@ Cmd-W that the app keeps around. Format variables:
   `window-is-fullscreen`, `app-name`, `app-bundle-id`, `app-pid`, and the
   workspace variables
 
+`%{window-title}` is read through Accessibility, as rules read it. A window
+whose app doesn't answer, or one on a Space not shown since dinky started, lists
+with an empty title.
+
 `%{monitor-is-main}` tells a bar which workspaces are on the side display.
 
 ### SketchyBar

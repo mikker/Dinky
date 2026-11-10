@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- `list-windows` shows window titles with just the Accessibility permission, reading them as rules do; before, it needed Screen Recording, which dinky never asks for. A window on a Space not shown since dinky started can still list without a title (#70, thanks @codyo-o).
+
 ## 0.25
 
 ### Commands

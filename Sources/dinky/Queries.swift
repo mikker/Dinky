@@ -11,14 +11,15 @@ struct WindowInfo {
     let id: UInt32
     let pid: pid_t
     let app: String
-    let title: String
     /// Global coordinates, top-left origin.
     let frame: CGRect
 }
 
-/// Normal windows on any Space, front to back, filtered like the spike's `ls`. dinky's own (borders) are left out,
-/// and so are windows their app has ordered out, such as a settings window closed with Cmd-W that the app keeps
-/// around hidden: WindowServer still lists those, on the Space they were last shown on.
+/// Normal windows on any Space, front to back, filtered like the spike's `ls`. Left out are dinky's own (borders),
+/// slivers 40 pt or less across, and windows their app has ordered out, such as a settings window closed with Cmd-W
+/// that the app keeps around hidden: WindowServer still lists those, on the Space they were last shown on.
+/// No titles: WindowServer gives other apps' titles only to a process with Screen Recording, which dinky does not
+/// ask for. `listWindows` reads them through Accessibility, as rules do.
 func windowList() -> [WindowInfo] {
     let info = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
     return info.compactMap { w in
@@ -27,11 +28,10 @@ func windowList() -> [WindowInfo] {
             id: w[kCGWindowNumber as String] as? UInt32 ?? 0,
             pid: w[kCGWindowOwnerPID as String] as? pid_t ?? 0,
             app: w[kCGWindowOwnerName as String] as? String ?? "",
-            title: w[kCGWindowName as String] as? String ?? "",
             frame: CGRect(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0, width: bounds["Width"] ?? 0, height: bounds["Height"] ?? 0))
         guard w[kCGWindowLayer as String] as? Int == 0, (w[kCGWindowAlpha as String] as? Double ?? 0) > 0,
               window.app != "Dock", window.app != "WindowServer", window.pid != getpid(),
-              !window.title.isEmpty || (window.frame.width > 40 && window.frame.height > 40),
+              window.frame.width > 40, window.frame.height > 40,
               dinky_window_info(window.id).isOrderedIn else { return nil }
         return window
     }
@@ -64,6 +64,8 @@ func listWindows(_ query: WindowQuery) -> Reply {
     let now = QueryState()
     let coordinator = AppState.shared.coordinator
     let focused = query.focused ? focusedWindowID() : nil
+    // Each title is an AX call, so only made when the format shows them.
+    let titles = query.format.uses("window-title")
     var rows: [(display: Int, workspace: Int, id: UInt32, values: [String: String])] = []
     for (window, sid) in now.windows {
         guard let i = now.displays.firstIndex(where: { $0.spaces.contains(sid) }) else { continue }
@@ -80,9 +82,10 @@ func listWindows(_ query: WindowQuery) -> Reply {
         if let bundleID = query.appBundleID, app?.bundleIdentifier != bundleID { continue }
         // Nothing is tiled on a native full-screen Space.
         let layout = !display.userSpaces.contains(sid) ? "fullscreen" : coordinator?.layoutName(of: window.id) ?? "floating"
+        let title = titles ? coordinator?.applier.title(pid: window.pid, id: window.id) : nil
         var values = now.monitorValues(i).merging(n.map { now.workspaceValues($0, space: sid, on: display) } ?? [:]) { a, _ in a }
         values.merge([
-            "window-id": "\(window.id)", "window-title": window.title,
+            "window-id": "\(window.id)", "window-title": title ?? "",
             "window-identifier": coordinator?.windowIdentifiers[window.id] ?? "",
             "window-layout": layout, "window-parent-container-layout": layout,
             "window-is-floating": "\(layout == "floating")", "window-is-fullscreen": "\(layout == "fullscreen")",

@@ -109,6 +109,13 @@ struct FormatTests {
         #expect(MonitorQuery().format.render([["monitor-id": "1", "monitor-name": "Built-in"]]) == "1 | Built-in")
     }
 
+    @Test func `A format knows which variables it shows`() throws {
+        #expect(WindowQuery().format.uses("window-title"))
+        let ids = try Format("%{window-id}%{right-padding}", variables: WindowQuery.variables)
+        #expect(ids.uses("window-id"))
+        #expect(!ids.uses("window-title"))
+    }
+
     @Test func `Unknown variable fails`() {
         let error = #expect(throws: CommandError.self) {
             try render("%{c}", [])

@@ -41,6 +41,8 @@ public struct Format: Equatable, Sendable {
         self.parts = parts
     }
 
+    public func uses(_ variable: String) -> Bool { parts.contains(.variable(variable)) }
+
     /// One line per row. Variables missing from a row render empty.
     public func render(_ rows: [[String: String]]) -> String {
         let cells = rows.map(cells)
