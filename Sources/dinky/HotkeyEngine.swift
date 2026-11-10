@@ -1,13 +1,19 @@
+import AppKit
 import CoreGraphics
 import DinkyConfig
 import Foundation
 
 /// One key-down event tap with per-mode bindings. A bound key is swallowed and its command list
-/// handed to `onCommands`; anything else passes through untouched. Mode commands are the caller's
-/// job: it sees `mode service` among the commands and calls `setMode`.
+/// handed to `onCommands`, except in apps excluded by that binding; anything else passes through
+/// untouched. Mode commands are the caller's job: it sees `mode service` among the commands and
+/// calls `setMode`.
 final class HotkeyEngine {
     private let onCommands: ([String]) -> Void
-    private var modes: [String: [KeyPress: [String]]] = [:]
+    private struct ModeBindings {
+        let mode: Mode
+        let combos: [KeyPress: KeyCombo]
+    }
+    private var modes: [String: ModeBindings] = [:]
     private var sides = ModifierSides()
     private(set) var currentMode = "main"
     var enabled = true
@@ -24,7 +30,9 @@ final class HotkeyEngine {
     func load(modes: [String: Mode], sides: ModifierSides) {
         self.sides = sides
         self.modes = modes.mapValues { mode in
-            Dictionary(uniqueKeysWithValues: mode.bindings.map { (KeyPress($0.key), $0.value) })
+            ModeBindings(mode: mode, combos: Dictionary(uniqueKeysWithValues: mode.bindings.map {
+                (KeyPress($0.key), $0.key)
+            }))
         }
         enter("main")
     }
@@ -62,7 +70,11 @@ final class HotkeyEngine {
     /// The commands bound to this event in the current mode, if dinky should take it.
     fileprivate func commands(for event: CGEvent) -> [String]? {
         guard enabled, let press = KeyPress(event, sides: sides) else { return nil }
-        return modes[currentMode]?[press]
+        guard let mode = modes[currentMode], let combo = mode.combos[press] else { return nil }
+        let frontApp = mode.mode.excludedApps[combo] == nil
+            ? nil
+            : NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        return mode.mode.commands(for: combo, frontApp: frontApp)
     }
 
     fileprivate func handle(_ type: CGEventType, _ event: CGEvent) -> Unmanaged<CGEvent>? {

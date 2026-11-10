@@ -19,6 +19,9 @@
 - Closing or minimizing the focused window no longer leaves its Space without keyboard focus: dinky focuses the workspace's next tile, so `focus` commands work without a click. A key press, click, focus command or Space switch right after the close still wins. On macOS 15 this also takes focus back when macOS hands it to the app's window on another display; on macOS 27 dinky can't tell that from a deliberate switch and leaves it (#69, thanks @ivanmilov).
 - Layout stacking no longer brings back a window you are minimizing when a slow layout pass finishes during the animation (#69).
 - `debug-state` no longer crashes dinky when a window's frame is briefly unavailable during a close or minimize (#69).
+### Key bindings
+
+- A binding can be a table, `{ command = '...', exclude-apps = ['<bundle id>'] }`. In an excluded app dinky leaves the key to the app, so terminals with their own `ctrl-hjkl` pane navigation keep it.
 
 ## 0.24
 

@@ -314,7 +314,7 @@
         "type": "object",
         "description": "Key combinations mapped to the command or commands they run.",
         "propertyNames": { "$ref": "#/definitions/keyCombo" },
-        "additionalProperties": { "$ref": "#/definitions/commands" }
+        "additionalProperties": { "$ref": "#/definitions/binding" }
       }
     }
   },
@@ -371,6 +371,25 @@
       "oneOf": [
         { "$ref": "#/definitions/command" },
         { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/command" } }
+      ]
+    },
+    "binding": {
+      "description": "A command or list of commands, optionally excluded for exact app bundle IDs.",
+      "oneOf": [
+        { "$ref": "#/definitions/commands" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["command"],
+          "properties": {
+            "command": { "$ref": "#/definitions/commands", "description": "The command or commands to run." },
+            "exclude-apps": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "description": "Exact bundle IDs in which this key is passed through to the app."
+            }
+          }
+        }
       ]
     },
     "workspaceSettings": {

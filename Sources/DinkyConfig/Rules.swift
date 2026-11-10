@@ -57,11 +57,21 @@ public enum WindowKind: String, CaseIterable {
     case normal, dialog, sheet, panel
 }
 
-/// `[mode.<name>]`: key combos mapped to the commands they run, in order.
+/// `[mode.<name>]`: key combos mapped to the commands they run, in order. A binding can be a
+/// command string, a list of command strings, or a table with `command` and `exclude-apps`.
 public struct Mode: Equatable {
     public var bindings: [KeyCombo: [String]] = [:]
+    /// Bundle IDs in which a combo is not taken: the key goes to the app. Only combos with exclusions.
+    public var excludedApps: [KeyCombo: Set<String>] = [:]
 
     public init() {}
+
+    /// The commands for `combo`, unless its excluded app is frontmost.
+    public func commands(for combo: KeyCombo, frontApp: String?) -> [String]? {
+        guard let commands = bindings[combo] else { return nil }
+        guard let frontApp, let excluded = excludedApps[combo] else { return commands }
+        return excluded.contains(frontApp) ? nil : commands
+    }
 
     init(_ t: Table) throws {
         for key in t.keys {
@@ -74,7 +84,20 @@ public struct Mode: Equatable {
             if bindings[combo] != nil {
                 throw ConfigError(path: t.path(key), "'\(combo)' is bound twice")
             }
-            bindings[combo] = try t.commands(key)
+            if t.isTable(key) {
+                let binding = try t.table(key)!
+                guard let commands = try binding.commands("command") else {
+                    throw ConfigError(path: binding.path("command"), "missing, a binding table needs 'command'")
+                }
+                let excludedApps = try binding.strings("exclude-apps") ?? []
+                try binding.done()
+                bindings[combo] = commands
+                if !excludedApps.isEmpty {
+                    self.excludedApps[combo] = Set(excludedApps)
+                }
+            } else {
+                bindings[combo] = try t.commands(key)
+            }
         }
         try t.done()
     }
