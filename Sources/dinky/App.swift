@@ -86,8 +86,10 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             print(keys ? "app: key bindings on" : "app: key bindings off, could not create the keyboard event tap (Accessibility?)")
         }
         let trouble = state.configError != nil || !otherTilers.isEmpty || !hotkeysActive
-        statusItem.button?.title = (workspace.map { "\($0)" } ?? "?") + (trouble ? "!" : "")
-        statusItem.button?.appearsDisabled = !state.enabled
+        guard let button = statusItem.button else { return }
+        let title = (workspace.map { "\($0)" } ?? "?") + (trouble ? "!" : "")
+        if button.title != title { button.title = title }
+        if button.appearsDisabled != !state.enabled { button.appearsDisabled = !state.enabled }
     }
 
     /// The focused mode's bindings while the menu is built, so each item shows its key.
