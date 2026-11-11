@@ -14,6 +14,21 @@ struct ConfigIssuesTests {
         #expect(result.applied == [issue])
     }
 
+    @Test func `Warnings are listed by line after the error, keeping order within a line`() {
+        let error = ConfigError(path: "bad", "broken", line: 9)
+        let warnings = [
+            ConfigWarning(path: "eight", "w", line: 8),
+            ConfigWarning(path: "none", "w"),
+            ConfigWarning(path: "two-a", "w", line: 2),
+            ConfigWarning(path: "five", "w", line: 5),
+            ConfigWarning(path: "two-b", "w", line: 2)
+        ]
+
+        let paths = ConfigIssues.issues(error: error, warnings: warnings).map(\.path)
+
+        #expect(paths == ["bad", "two-a", "two-b", "five", "eight", "none"])
+    }
+
     @Test func `Several fixes on one line apply in order`() {
         let issues = [
             ConfigIssue(ConfigWarning(path: "one", "first", line: 1,
