@@ -29,6 +29,22 @@ struct TilesTests {
         }
     }
 
+    // Seed 7 of the VM fuzz: Finder (3) next to a TextEdit window (4) whose minimum is not known yet, in a
+    // column the root squeezed to Finder's minimum. Window 4 got a tile 0 pt wide, hanging off the display.
+    @Test func `A window whose minimum is unknown keeps a usable tile beside one at its minimum`() {
+        let row = Container(.horizontal, .tiles, [.window(3), .window(4)])
+        let column = Container(.vertical, .tiles, [.container(row), .window(5)])
+        var root = Container(.horizontal, .tiles, [.window(1), .window(2), .container(column)])
+        root.setRatios([0.33, 0.33, 0.34])
+        var layout = Layout()
+        root.layout(in: rect(8, 38, 1008, 664), gaps: Gaps(all: 8), padding: 30,
+                    minimums: [3: CGSize(width: 475, height: 0)], into: &layout)
+        for (id, frame) in layout.frames {
+            #expect(rect(8, 38, 1008, 664).contains(frame), "window \(id) at \(frame)")
+            #expect(frame.width >= 100, "window \(id) at \(frame)")
+        }
+    }
+
     @Test(arguments: zip(1...5, [
         [1: rect(0, 0, 1000, 600)],
         [1: rect(0, 0, 500, 600), 2: rect(500, 0, 500, 600)],

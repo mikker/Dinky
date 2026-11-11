@@ -7,6 +7,7 @@
 - Borders use a fraction of the memory: about 1.5 MB per window instead of up to 30 MB on Retina displays
 - Stop leaking memory as windows move, resize and get listed
 - Use less CPU while idle
+- A window next to one at its minimum size no longer gets squeezed to nothing and pushed off the display
 
 ## 0.27
 

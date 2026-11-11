@@ -83,9 +83,9 @@ extension Container {
         result.containerRects[path] = rect
         let tiled = mode == .tiles || virtual, axis = axis(in: rect), gap = gaps.inner(axis)
         let extents = children.map { $0.minimumExtent(axis, gap: gap, padding: 0, minimums) }
+        let preferred = children.map { $0.minimumExtent(axis, gap: gap, padding: padding, floor: Self.usableExtent, minimums) }
         let rects = tiled
-            ? tileRects(in: rect, gap: gap, minimums: extents,
-                        preferredMinimums: children.map { $0.minimumExtent(axis, gap: gap, padding: padding, minimums) })
+            ? tileRects(in: rect, gap: gap, minimums: extents, preferredMinimums: preferred)
             : accordionRects(in: rect, padding: padding, minimums: extents)
         for i in stackingOrder {
             switch children[i] {
@@ -98,6 +98,10 @@ extension Container {
             }
         }
     }
+
+    /// What a tile keeps when there is room, for a window whose minimum is not known: without it, a sibling at its
+    /// minimum could take the whole row and leave the window a tile 0 pt wide.
+    static let usableExtent: CGFloat = 100
 
     /// Child indices front to back: the active child, then by distance from it, lower index first on ties.
     var stackingOrder: [Int] {
@@ -172,14 +176,17 @@ func fit(_ sizes: [CGFloat], minimums: [CGFloat], total: CGFloat) -> [CGFloat] {
 extension Node {
     /// The smallest extent along `axis` this subtree can take without a window going below its minimum.
     /// With configured `padding`, includes preferred accordion peeks; pass zero for the hard content budget.
+    /// A window whose minimum along `axis` is not known counts as `floor`.
     /// An `auto` container counts as running across `axis`: a tile's longer side is usually across its parent's axis.
-    func minimumExtent(_ axis: Orientation, gap: CGFloat, padding: CGFloat, _ minimums: [WindowID: CGSize]) -> CGFloat {
+    func minimumExtent(_ axis: Orientation, gap: CGFloat, padding: CGFloat, floor: CGFloat = 0,
+                       _ minimums: [WindowID: CGSize]) -> CGFloat {
         switch self {
         case .window(let id):
-            guard let size = minimums[id] else { return 0 }
-            return axis == .horizontal ? size.width : size.height
+            // Minimums only set the dimensions a window refused; the other is unknown, not 0.
+            let size = minimums[id] ?? .zero, known = axis == .horizontal ? size.width : size.height
+            return known > 0 ? known : floor
         case .container(let c):
-            let each = c.children.map { $0.minimumExtent(axis, gap: gap, padding: padding, minimums) }
+            let each = c.children.map { $0.minimumExtent(axis, gap: gap, padding: padding, floor: floor, minimums) }
             guard c.orientation == ContainerOrientation(axis), !each.isEmpty else { return each.max() ?? 0 }
             return c.mode == .tiles
                 ? each.reduce(0, +) + gap * CGFloat(each.count - 1)
