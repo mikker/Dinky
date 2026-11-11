@@ -105,6 +105,12 @@ final class FrameApplier {
         if writes.transition(to: state) { scheduler.cancel() }
     }
 
+    /// Invalidate queued frames, completions and raises before a presentation transition.
+    func cancelPending() {
+        writes.invalidate()
+        scheduler.cancel()
+    }
+
     /// Writes one step of an animation: no readback, no retry, no raising.
     func step(_ jobs: [FrameJob]) {
         guard writes.permit != nil else { return }

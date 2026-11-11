@@ -24,11 +24,14 @@ final class BorderManager {
     /// Whether dinky is animating the window, when its border only follows moves: redrawing it at every
     /// size of a resize costs more than a frame.
     private let isAnimating: (UInt32) -> Bool
+    private let isPresenting: (UInt32) -> Bool
 
-    init(config: Borders, model: WindowModel, displays: [Display], isAnimating: @escaping (UInt32) -> Bool) {
+    init(config: Borders, model: WindowModel, displays: [Display], isAnimating: @escaping (UInt32) -> Bool,
+         isPresenting: @escaping (UInt32) -> Bool = { _ in false }) {
         self.config = config
         self.model = model
         self.isAnimating = isAnimating
+        self.isPresenting = isPresenting
         visibleSpaces = Self.visibleSpaces(on: displays)
         focusedID = dinky_border_focused_window()
         syncAll()
@@ -126,7 +129,7 @@ final class BorderManager {
     private func follow(_ ids: Set<UInt32>) {
         for id in ids {
             guard let window = model.windows[id] else { continue }
-            if borders[id]?.follow(window) != true { sync(window) }
+            if isPresenting(id) || borders[id]?.follow(window) != true { sync(window) }
         }
     }
 
@@ -146,7 +149,7 @@ final class BorderManager {
     }
 
     private func sync(_ window: Window) {
-        guard config.enabled, window.isDocument, config.decorates(bundleID: window.bundleID) else {
+        guard config.enabled, !isPresenting(window.id), window.isDocument, config.decorates(bundleID: window.bundleID) else {
             borders[window.id] = nil
             return
         }

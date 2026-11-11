@@ -38,6 +38,8 @@ final class Coordinator {
     private var borders: BorderManager?
     func isBorderWindow(_ id: WindowID) -> Bool { borders?.isBorder(id) ?? false }
     var workspaces: [UInt64: Workspace] = [:]
+    /// Presentation windows retain their tile but are excluded from frame writes and borders.
+    var presenting: Set<WindowID> = []
     var placements: [WindowID: Placement] = [:]
     /// AX identifiers read during classification. Cached so diagnostic queries never block on AX.
     var windowIdentifiers: [WindowID: String] = [:]
@@ -145,7 +147,8 @@ final class Coordinator {
     private func updateBorders() {
         if enabled, config.borders.enabled {
             borders = borders ?? BorderManager(config: config.borders, model: model, displays: displays.displays,
-                                               isAnimating: { [unowned self] id in animator.isAnimating(id) })
+                                               isAnimating: { [unowned self] id in animator.isAnimating(id) },
+                                               isPresenting: { [unowned self] id in presenting.contains(id) })
             borders?.update(config: config.borders)
         } else {
             borders = nil
@@ -196,9 +199,18 @@ final class Coordinator {
         }
     }
 
+    /// A presentation transition retires animations and their captured layouts as well as queued AX work.
+    func cancelPresentationAnimations() {
+        animator.cancel()
+        cancelDrag()
+        layouts.dirty.formUnion(workspaces.keys)
+        snap.formUnion(workspaces.keys)
+        borders?.missionControlChanged()
+    }
+
     /// Apps can move themselves after the write and its retry have finished. Correct that event, not a timer.
     private func recoverFrame(of id: WindowID) {
-        guard enabled, !MissionControl.shared.active,
+        guard enabled, !MissionControl.shared.active, !presenting.contains(id),
               let placement = placements[id], !placement.floating, let key = placement.space,
               isVisible(key), let tile = workspaces[key]?.layout().frames[id] else { return }
         let eligible = dragging == nil && !CGEventSource.buttonState(.combinedSessionState, button: .left)
@@ -361,6 +373,8 @@ final class Coordinator {
     /// Classifies a window the first time it is on screen, then keeps it in the tree of its current Space
     /// while it is shown: minimized windows, windows of hidden apps and inactive tabs read as minimized.
     func track(_ window: Window) {
+        updatePresentation(window)
+        guard !presenting.contains(window.id) else { return }
         if placements[window.id] == nil {
             // AX only lists windows on a Space that is on screen; the rest are classified when theirs is. Off, new
             // windows are not classified at all: that runs `[[rules]]` and moves them to the focused display.
@@ -389,6 +403,7 @@ final class Coordinator {
     }
 
     func forget(_ id: WindowID) {
+        presenting.remove(id)
         windowIdentifiers[id] = nil
         settlements[id] = nil
         adoptTargets[id] = nil
@@ -570,7 +585,7 @@ final class Coordinator {
         workspaces[key] = workspace
         // A window being dragged stays under the pointer: neither written back to its tile nor raised. With no
         // front, the applier raises nothing of its app, which would take focus from it.
-        let layout = workspace.layout().excluding(dragging)
+        let layout = presentationLayout(workspace.layout().excluding(dragging))
         let front = workspace.focused == dragging ? nil : workspace.focused
         let pids = Dictionary(uniqueKeysWithValues: layout.order.compactMap { id in model.windows[id].map { (id, $0.pid) } })
         let write = { [weak self] in

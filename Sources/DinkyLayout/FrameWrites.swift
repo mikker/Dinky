@@ -17,6 +17,9 @@ public final class FrameWrites: @unchecked Sendable {
         lock.withLock { state != .overview && generation == permit }
     }
 
+    /// Cancel queued work without changing whether new layout work is admitted.
+    public func invalidate() { lock.withLock { generation += 1 } }
+
     /// Disabled tiling gives restoration a fresh permit, even in overview. Overview changes while disabled
     /// leave that restoration alone; re-enabling invalidates it before automatic layout work can resume.
     @discardableResult

@@ -29,4 +29,7 @@ Learn more:
 Window rules can match or exclude Accessibility identifiers to distinguish auxiliary
 windows from documents with the same title. See [window rules](https://dinky.rodeo/configuration/#rules).
 
+InDesign presentation mode fills the display without tiling or borders. The window returns
+to its existing tile when presentation ends.
+
 MIT licensed.
