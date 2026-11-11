@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Configuration
+
+- The config can now report warnings, shown by `dinky doctor` and in the menu, with a suggested fix where there is one.
+- A config issues window lists warnings and errors, applies its suggestions, and keeps a backup before editing.
+- A config using a renamed key loads again with a warning naming the new key; for example, `[master] orientation`, renamed to `side` in 0.23, no longer makes the config fail to load.
+- The JSON schema lists renamed keys as deprecated, so editors such as Zed or VS Code no longer mark `[master] orientation` as an unknown key.
+
+### Fixes
+
+- Negative gaps and accordion padding now load as 0, negative border widths as 0, `inf` or `nan` border widths as the default, and `01` or `+1` as the plain workspace number in `[workspace-to-display]`, where the first of two keys naming one workspace wins. Each is reported with a warning and a suggested fix. Before, they were accepted silently, and `01` and `1` overrode each other.
+- `dinky doctor` warns about a `[workspace.<number>]` table past the last workspace. Before, nothing said the table did nothing.
+
+### Other
+
+- The configuration reference says which values the config accepts and how legacy values are handled: negative gaps, accordion padding and border widths load as 0, `inf` or `nan` border widths load as the default, and `01` or `+1` load as the plain workspace number in `[workspace-to-display]`.
+- A test checks that the configuration page shows the same default config dinky writes on first run.
+- Renamed keys, removed keys and renamed choice values are listed in one table, `Sources/DinkyConfig/KeyChanges.swift`, so a future rename keeps old configs loading, with a warning, by adding one entry.
+
 ## 0.26
 
 ### Key bindings
@@ -23,24 +43,6 @@
 - Closing or minimizing the focused window no longer leaves its Space without keyboard focus: dinky focuses the workspace's next tile, so `focus` commands work without a click. A key press, click, focus command or Space switch right after the close still wins. On macOS 15 this also takes focus back when macOS hands it to the app's window on another display; on macOS 27 dinky can't tell that from a deliberate switch and leaves it (#69, thanks @ivanmilov).
 - Layout stacking no longer brings back a window you are minimizing when a slow layout pass finishes during the animation (#69).
 - `debug-state` no longer crashes dinky when a window's frame is briefly unavailable during a close or minimize (#69).
-
-### Configuration
-
-- The config can now report warnings, shown by `dinky doctor` and in the menu, with a suggested fix where there is one.
-- A config issues window lists warnings and errors, applies its suggestions, and keeps a backup before editing.
-- A config using a renamed key loads again with a warning naming the new key; for example, `[master] orientation`, renamed to `side` in 0.23, no longer makes the config fail to load.
-- The JSON schema lists renamed keys as deprecated, so editors such as Zed or VS Code no longer mark `[master] orientation` as an unknown key.
-
-### Fixes
-
-- Negative gaps and accordion padding now load as 0, negative border widths as 0, `inf` or `nan` border widths as the default, and `01` or `+1` as the plain workspace number in `[workspace-to-display]`, where the first of two keys naming one workspace wins. Each is reported with a warning and a suggested fix. Before, they were accepted silently, and `01` and `1` overrode each other.
-- `dinky doctor` warns about a `[workspace.<number>]` table past the last workspace. Before, nothing said the table did nothing.
-
-### Other
-
-- The configuration reference says which values the config accepts and how legacy values are handled: negative gaps, accordion padding and border widths load as 0, `inf` or `nan` border widths load as the default, and `01` or `+1` load as the plain workspace number in `[workspace-to-display]`.
-- A test checks that the configuration page shows the same default config dinky writes on first run.
-- Renamed keys, removed keys and renamed choice values are listed in one table, `Sources/DinkyConfig/KeyChanges.swift`, so a future rename keeps old configs loading, with a warning, by adding one entry.
 
 ## 0.24
 
