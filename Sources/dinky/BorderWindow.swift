@@ -2,7 +2,7 @@ import AppKit
 import DinkyConfig
 import DinkyPrivate
 
-// The border of one window: a dinky-owned SkyLight window kept directly below or above its target.
+// The border of one window: dinky-owned SkyLight windows, one per edge, kept directly below or above its target.
 // Redraws only when the look or size changes; a plain move just re-places it.
 final class BorderWindow {
     struct Look: Equatable {
@@ -20,8 +20,9 @@ final class BorderWindow {
     }
 
     private let target: UInt32
-    /// The border's own WindowServer window id (0 until created).
-    private(set) var id: UInt32 = 0
+    /// The edge windows; all 0 until created.
+    private var border = DinkyBorder()
+    private var created = false
     private var scale = 0.0
     private var spaceID: UInt64 = 0
     private var drawn: Look?
@@ -32,8 +33,11 @@ final class BorderWindow {
     }
 
     deinit {
-        if id != 0 { dinky_border_destroy(id) }
+        dinky_border_destroy(&border)
     }
+
+    /// Whether `id` is one of this border's own windows.
+    func owns(_ id: UInt32) -> Bool { dinky_border_owns(&border, id) }
 
     /// Place and draw the border around `window`. With `moveOnly`, a border whose shape would change hides instead,
     /// as redrawing it at every size of a resize costs more than a frame; a new colour alone is drawn, once.
@@ -43,18 +47,18 @@ final class BorderWindow {
         if moveOnly, drawn?.with(color: color) != look { return hide() }
         let scale = backingScale(of: window.frame)
         if scale != self.scale { recreate(scale: scale) }
-        guard id != 0 else { return }
+        guard created else { return }
 
         if spaceID != window.spaceID, window.spaceID != 0 {
-            dinky_border_move_to_space(id, window.spaceID)
+            dinky_border_move_to_space(&border, window.spaceID)
             spaceID = window.spaceID
         }
         let order: DinkyBorderOrder = config.order == .above ? .above : .below
         if look == drawn {
-            dinky_border_move(id, target, window.frame, config.width, order)
+            dinky_border_move(&border, target, window.frame, config.width, order)
         } else {
             let rgba = DinkyBorderColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha)
-            dinky_border_update(id, target, window.frame, Int32(window.cornerRadius), rgba, config.width, order)
+            dinky_border_update(&border, target, window.frame, Int32(window.cornerRadius), rgba, config.width, order)
             drawn = look
         }
         isShown = true
@@ -66,21 +70,21 @@ final class BorderWindow {
     func follow(_ window: Window) -> Bool {
         guard isShown, let drawn, drawn.size == window.frame.size,
               backingScale(of: window.frame) == scale else { return false }
-        dinky_border_follow(id, window.frame, drawn.width)
+        dinky_border_follow(&border, window.frame, drawn.width)
         return true
     }
 
     func hide() {
         guard isShown else { return }
-        dinky_border_hide(id)
+        dinky_border_hide(&border)
         isShown = false
     }
 
     // JankyBorders sets the resolution once, at creation; a display change gets a new window.
     // Widths and radii stay in points; the resolution alone decides the pixels.
     private func recreate(scale: Double) {
-        if id != 0 { dinky_border_destroy(id) }
-        id = dinky_border_create(scale)
+        dinky_border_destroy(&border)
+        created = dinky_border_create(&border, scale)
         self.scale = scale
         spaceID = 0
         drawn = nil
