@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Stop leaking memory as windows move, resize and get listed
+- Use less CPU while idle
+
 ## 0.27
 
 ### Fixes
