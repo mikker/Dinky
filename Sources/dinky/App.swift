@@ -88,8 +88,10 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let trouble = state.configError != nil || !otherTilers.isEmpty || !hotkeysActive
         guard let button = statusItem.button else { return }
         let title = (workspace.map { "\($0)" } ?? "?") + (trouble ? "!" : "")
+        let disabled = !state.enabled
+        // Only on change: every set redraws the status item, which kept dinky and WindowServer busy while idle.
         if button.title != title { button.title = title }
-        if button.appearsDisabled != !state.enabled { button.appearsDisabled = !state.enabled }
+        if button.appearsDisabled != disabled { button.appearsDisabled = disabled }
     }
 
     /// The focused mode's bindings while the menu is built, so each item shows its key.

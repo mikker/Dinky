@@ -4,7 +4,7 @@
 
 ### Fixes
 
-- dinky uses less CPU while idle: the menu bar title is only set when it changes.
+- dinky uses far less CPU while idle. It was redrawing its menu bar item twice a second.
 
 ## 0.26
 
