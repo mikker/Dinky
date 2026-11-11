@@ -36,8 +36,14 @@ public struct ConfigIssue: Equatable, CustomStringConvertible {
 public enum ConfigIssues {
     public static let documentationURL = URL(string: "https://github.com/mikker/Dinky/blob/main/docs/configuration.md")!
 
+    /// The error first, then warnings in file order so the list reads top to bottom like the config.
+    /// Warnings without a line go last; the sort is stable, so fixes on one line keep their order.
     public static func issues(error: ConfigError?, warnings: [ConfigWarning]) -> [ConfigIssue] {
-        (error.map { [ConfigIssue($0)] } ?? []) + warnings.map(ConfigIssue.init)
+        let byLine = warnings.enumerated().sorted { a, b in
+            let lineA = a.element.line ?? Int.max, lineB = b.element.line ?? Int.max
+            return lineA != lineB ? lineA < lineB : a.offset < b.offset
+        }
+        return (error.map { [ConfigIssue($0)] } ?? []) + byLine.map { ConfigIssue($0.element) }
     }
 
     /// Applies the first matching replacement on each issue's line without re-serialising the TOML.
