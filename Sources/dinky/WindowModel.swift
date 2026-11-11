@@ -199,7 +199,9 @@ final class WindowModel {
         window.isDocument = info.isDocument
         window.isVisible = info.isVisible
         window.isMinimized = info.isMinimized
-        window.cornerRadius = Int(info.cornerRadius)
+        // Read once: SkyLight leaks a radius that is not a whole number on every read. A window that reported none
+        // yet, as it may while it is still being set up, is asked again; a radius of 0 never leaks.
+        if window.cornerRadius == 0 { window.cornerRadius = Int(dinky_window_corner_radius(window.id)) }
     }
 
     private func watch() {

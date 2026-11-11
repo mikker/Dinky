@@ -56,10 +56,13 @@ typedef struct {
     bool isDocument;       // JankyBorders window_suitable, kind only: a real document or modal window
     bool isVisible;        // the visible attribute or tag; clear while minimized
     bool isMinimized;      // yabai space_window_list minimized test
-    int cornerRadius;      // 0 if SkyLight does not report one
 } DinkyWindowInfo;
 
 DinkyWindowInfo dinky_window_info(uint32_t windowID);
+
+// The window's corner radius, 0 if SkyLight does not report one. SkyLight leaks the radii it reports
+// whenever they are not whole numbers, so this is read once per window rather than with every info read.
+int dinky_window_corner_radius(uint32_t windowID);
 
 // The frame alone, in one call where dinky_window_info makes several: for a window that moved.
 // CGRectNull if the window is gone.

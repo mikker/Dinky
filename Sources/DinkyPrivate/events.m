@@ -119,15 +119,6 @@ DinkyWindowInfo dinky_window_info(uint32_t windowID)
         info.parentID = SLSWindowIteratorGetParentID(iterator);
         info.tags = SLSWindowIteratorGetTags(iterator);
         info.attributes = SLSWindowIteratorGetAttributes(iterator);
-
-        // JankyBorders windows_window_create: first entry of the radii array, released after.
-        if (SLSWindowIteratorGetCornerRadii) {
-            CFArrayRef radii = SLSWindowIteratorGetCornerRadii(iterator);
-            if (radii && CFArrayGetCount(radii) > 0) {
-                CFNumberGetValue(CFArrayGetValueAtIndex(radii, 0), kCFNumberIntType, &info.cornerRadius);
-            }
-            if (radii) CFRelease(radii);
-        }
     }
     if (iterator) CFRelease(iterator);
     CFRelease(query);
@@ -143,6 +134,26 @@ DinkyWindowInfo dinky_window_info(uint32_t windowID)
     info.isVisible = dinky_is_visible(info.attributes, info.tags);
     info.isMinimized = dinky_is_minimized(info.attributes, info.tags);
     return info;
+}
+
+// JankyBorders windows_window_create: the first entry of the radii array, released after.
+int dinky_window_corner_radius(uint32_t windowID)
+{
+    if (!SLSWindowIteratorGetCornerRadii) return 0;
+    CFTypeRef query = SLSWindowQueryWindows(dinky_connection(), (__bridge CFArrayRef)@[@(windowID)], 1);
+    if (!query) return 0;
+    CFTypeRef iterator = SLSWindowQueryResultCopyWindows(query);
+    int radius = 0;
+    if (iterator && SLSWindowIteratorAdvance(iterator)) {
+        CFArrayRef radii = SLSWindowIteratorGetCornerRadii(iterator);
+        if (radii && CFArrayGetCount(radii) > 0) {
+            CFNumberGetValue(CFArrayGetValueAtIndex(radii, 0), kCFNumberIntType, &radius);
+        }
+        if (radii) CFRelease(radii);
+    }
+    if (iterator) CFRelease(iterator);
+    CFRelease(query);
+    return radius;
 }
 
 CGRect dinky_window_frame(uint32_t windowID)

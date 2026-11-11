@@ -289,11 +289,12 @@ final class FrameApplier {
 
     private func frame(_ element: AXUIElement) -> (CGRect?, AXError) {
         var origin = CGPoint.zero, size = CGSize.zero
-        var value: CFTypeRef?
-        var error = AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &value)
-        guard error == .success, AXValueGetValue(value as! AXValue, .cgPoint, &origin) else { return (nil, error) }
-        error = AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &value)
-        guard error == .success, AXValueGetValue(value as! AXValue, .cgSize, &size) else { return (nil, error) }
+        // One variable per copy: a second copy into the same one overwrites the first without releasing it.
+        var position: CFTypeRef?, extent: CFTypeRef?
+        var error = AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &position)
+        guard error == .success, AXValueGetValue(position as! AXValue, .cgPoint, &origin) else { return (nil, error) }
+        error = AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &extent)
+        guard error == .success, AXValueGetValue(extent as! AXValue, .cgSize, &size) else { return (nil, error) }
         return (CGRect(origin: origin, size: size), .success)
     }
 }
