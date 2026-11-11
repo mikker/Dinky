@@ -68,18 +68,18 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.refresh() }
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.checkOtherTilers() }
         checkOtherTilers()
+        refresh()
         print("app: status item up, listening on \(socketPath)")
         print("STATUS:READY")  // fut's run extension watches for this line
         fflush(stdout)
     }
 
+    /// The next refresh shows the result.
     private func checkOtherTilers() {
         let tilers = runningOtherTilers()
-        if tilers != otherTilers {
-            otherTilers = tilers
-            if !tilers.isEmpty { print("app: \(otherTilersWarning(tilers))") }
-        }
-        refresh()
+        guard tilers != otherTilers else { return }
+        otherTilers = tilers
+        if !tilers.isEmpty { print("app: \(otherTilersWarning(tilers))") }
     }
 
     private func refresh() {

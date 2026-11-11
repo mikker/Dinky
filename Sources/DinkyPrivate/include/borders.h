@@ -33,7 +33,7 @@ typedef struct {
 } DinkyBorder;
 
 // Hidden, click-through, shadowless edge windows at `scale` (1 or 2, the target display's backing
-// scale). False, with nothing left behind, on failure.
+// scale). All four or, returning false, none; the other functions take a border that was created.
 bool dinky_border_create(DinkyBorder *border, double scale);
 
 // Reshapes and redraws the border as a `width`-point ring hugging `frame` (the target's

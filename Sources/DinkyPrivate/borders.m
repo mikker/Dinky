@@ -66,7 +66,7 @@ bool dinky_border_create(DinkyBorder *border, double scale)
     return true;
 }
 
-// The border window covers the target frame plus `width` on every side.
+// The ring covers the target frame plus `width` on every side.
 static CGRect outer_frame(CGRect frame, double width)
 {
     return CGRectInset(frame, -width, -width);
@@ -98,7 +98,7 @@ static void layout_edges(DinkyBorder *border, CGSize size, double outerRadius, d
 
 static bool used(const DinkyBorder *border, int i)
 {
-    return border->windows[i] && !CGRectIsEmpty(border->edges[i]);
+    return !CGRectIsEmpty(border->edges[i]);
 }
 
 static CGPoint edge_origin(const DinkyBorder *border, int i, CGPoint ringOrigin)
@@ -121,7 +121,6 @@ static void place(const DinkyBorder *border, uint32_t target, CGPoint origin, Di
     if (!transaction) return;
     for (int i = 0; i < DinkyBorderEdges; i++) {
         uint32_t wid = border->windows[i];
-        if (!wid) continue;
         if (!used(border, i)) {
             SLSTransactionOrderWindow(transaction, wid, OrderOut, 0);
             continue;
@@ -212,10 +211,8 @@ void dinky_border_follow(const DinkyBorder *border, CGRect frame, double width)
 
 void dinky_border_move_to_space(const DinkyBorder *border, uint64_t spaceID)
 {
-    NSMutableArray *windows = [NSMutableArray array];
-    for (int i = 0; i < DinkyBorderEdges; i++) {
-        if (border->windows[i]) [windows addObject:@(border->windows[i])];
-    }
+    const uint32_t *w = border->windows;
+    NSArray *windows = @[@(w[0]), @(w[1]), @(w[2]), @(w[3])];
     SLSMoveWindowsToManagedSpace(dinky_connection(), (__bridge CFArrayRef)windows, spaceID);
 }
 
@@ -223,9 +220,7 @@ void dinky_border_hide(const DinkyBorder *border)
 {
     CFTypeRef transaction = SLSTransactionCreate(dinky_connection());
     if (!transaction) return;
-    for (int i = 0; i < DinkyBorderEdges; i++) {
-        if (border->windows[i]) SLSTransactionOrderWindow(transaction, border->windows[i], OrderOut, 0);
-    }
+    for (int i = 0; i < DinkyBorderEdges; i++) SLSTransactionOrderWindow(transaction, border->windows[i], OrderOut, 0);
     SLSTransactionCommit(transaction, 0);
     CFRelease(transaction);
 }
