@@ -29,4 +29,12 @@ Learn more:
 Window rules can match or exclude Accessibility identifiers to distinguish auxiliary
 windows from documents with the same title. See [window rules](https://dinky.rodeo/configuration/#rules).
 
+Window borders use a subtle 5% optical thickening at rounded corner midpoints,
+tapering back to the configured width at the straight edges.
+
+Run `sh scripts/border-preview.sh` for a standalone native comparison. Choose 0% or 5–10%
+correction and adjust the border width from 1 to 16 points in quarter-point steps.
+Space toggles the selected correction against 0%.
+The floating test window uses the shared border path without replacing the running Dinky.
+
 MIT licensed.

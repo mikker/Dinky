@@ -1,6 +1,7 @@
 #import "borders.h"
 #import "query.h"
 #import "skylight.h"
+#import "border_path.h"
 
 // Window creation, shape and drawing, as JankyBorders src/misc/extern.h declares them.
 extern CGError CGSNewRegionWithRect(CGRect *rect, CFTypeRef *region);
@@ -165,12 +166,9 @@ void dinky_border_update(DinkyBorder *border, uint32_t target, CGRect frame, int
     int cid = dinky_connection();
     CGRect outer = outer_frame(frame, width);
     CGRect bounds = { CGPointZero, outer.size };
-    CGRect inner = CGRectInset(bounds, width, width);
-    // The outer edge grows the target's radius by the width.
-    double outerRadius = fitted_radius(bounds, cornerRadius + width), innerRadius = fitted_radius(inner, cornerRadius);
-    CGMutablePathRef ring = CGPathCreateMutable();
-    CGPathAddRoundedRect(ring, NULL, bounds, outerRadius, outerRadius);
-    CGPathAddRoundedRect(ring, NULL, inner, innerRadius, innerRadius);
+    // Keep the inner outline fixed and optically thicken rounded corner midpoints by 5%.
+    double outerRadius = fitted_radius(bounds, cornerRadius + width);
+    CGPathRef ring = dinky_border_path(bounds, cornerRadius, width, 0.05);
     layout_edges(border, outer.size, outerRadius, width);
 
     // Hold screen updates so the reshaped, redrawn and moved border appears at once.
