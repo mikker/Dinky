@@ -5,6 +5,7 @@
 ### Fixes
 
 - Rounded window borders get a subtle 5% optical thickening at the corner midpoints, leaving straight edges, inner outlines and square corners unchanged (#77, thanks @albertomalossi).
+- `dinky doctor` points to System Settings to turn off slow Cmd-Tab Space switching, instead of onboarding's one-time step (#76, thanks @ChrisGVE).
 
 ## 0.28
 

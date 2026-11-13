@@ -12,6 +12,13 @@ struct SpaceSwitchingTests {
         #expect(status.message.contains("macOS's slow switch"))
     }
 
+    // The onboarding offers this step only once, so the warning must give a fix that always works.
+    @Test func slowSwitchWarningSaysWhereToTurnItOff() throws {
+        let status = try #require(spaceSwitchingStatus(autoSwoosh: true, followsActivation: true))
+        #expect(status.message.contains("turn it off in System Settings > Desktop & Dock > Mission Control"))
+        #expect(!status.message.contains("onboarding"))
+    }
+
     @Test func persistentSettingExplainsRecoveryWithAndWithoutFollowing() throws {
         for follows in [false, true] {
             let status = try #require(spaceSwitchingStatus(autoSwoosh: false, followsActivation: follows))

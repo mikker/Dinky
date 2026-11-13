@@ -78,7 +78,7 @@ func runDoctor(_ args: [String]) -> Int32 {
 func spaceSwitchingStatus(autoSwoosh: Bool, followsActivation: Bool) -> (warning: Bool, message: String)? {
     if autoSwoosh {
         return followsActivation
-            ? (true, "\"When switching to an application, switch to a Space with open windows\" is on; Cmd-Tab will use macOS's slow switch instead of dinky's. The app's onboarding can turn it off")
+            ? (true, "\"When switching to an application, switch to a Space with open windows\" is on; Cmd-Tab will use macOS's slow switch instead of dinky's; turn it off in System Settings > Desktop & Dock > Mission Control")
             : nil
     }
     let recovery = "To restore macOS switching, turn on \"When switching to an application, switch to a Space with open windows\" in System Settings > Desktop & Dock > Mission Control."
