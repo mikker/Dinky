@@ -19,6 +19,7 @@ final class FrameApplier {
     private var elements: [Key: AXUIElement] = [:]
     /// Windows written but not read back, already logged, so a window that stays unreadable is logged once.
     private var unreadable: Set<WindowID> = []
+    private var elementless: Set<WindowID> = []
     /// The largest minimum size any window of an app has shown, by bundle id. Kept across sessions in
     /// Application Support, so the write-settle-retry chain that discovers a minimum runs once per app ever.
     private var appMinimums: [String: CGSize] = [:]
@@ -75,6 +76,7 @@ final class FrameApplier {
         lock.withLock {
             elements = elements.filter { $0.key.id != id }
             unreadable.remove(id)
+            elementless.remove(id)
         }
         scheduler.forget(id)
         passes.forget(id)
@@ -251,6 +253,7 @@ final class FrameApplier {
         guard error == .invalidUIElement, cached != nil else { return value }
         guard let fresh = lookUp(key) else {
             print("\(stamp()) frames: window \(id) of pid \(pid) no longer has an Accessibility element")
+            lock.withLock { _ = elementless.insert(id) }
             return nil
         }
         return body(fresh).0
@@ -264,8 +267,15 @@ final class FrameApplier {
     /// Looks the window up and caches what it finds, so a failed lookup also drops a stale element.
     private func lookUp(_ key: Key) -> AXUIElement? {
         let element = axWindow(pid: key.pid, wid: key.id, timeout: Self.timeout)
-        lock.withLock { elements[key] = element }
+        lock.withLock {
+            elements[key] = element
+            if element != nil { elementless.remove(key.id) }
+        }
         return element
+    }
+
+    func isElementless(_ id: WindowID) -> Bool {
+        lock.withLock { elementless.contains(id) }
     }
 
     // Size, position, size: the first size lets a window near the screen edge move, the second

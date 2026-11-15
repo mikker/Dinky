@@ -405,6 +405,13 @@ final class Coordinator {
         edit(space) { $0.remove(id) }
     }
 
+    func release(_ id: WindowID) {
+        guard let space = placements.removeValue(forKey: id)?.space else { return }
+        print("\(stamp()) frames: window \(id) left its tile on Space \(space), it has no Accessibility element")
+        fflush(stdout)
+        if !takeOverTile(of: id, in: space) { edit(space) { $0.remove(id) } }
+    }
+
     /// The front app's frontmost document window on a current Space.
     var focusedWindow: WindowID { dinky_border_focused_window() }
 
@@ -582,6 +589,7 @@ final class Coordinator {
                     let remaining = self.applying[key, default: 0] - 1
                     self.applying[key] = remaining > 0 ? remaining : nil
                     guard self.enabled, self.applier.allows(permit) else { return }
+                    for result in results where self.applier.isElementless(result.job.id) { self.release(result.job.id) }
                     for result in results {
                         if let got = result.got, self.animator.isResting(result.job.id, at: got, for: result.job.frame) {
                             self.frameRecovery[result.job.id] = nil
