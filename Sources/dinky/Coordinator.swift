@@ -359,7 +359,7 @@ final class Coordinator {
     }
 
     /// Classifies a window the first time it is on screen, then keeps it in the tree of its current Space
-    /// while it is shown: minimized windows, windows of hidden apps and inactive tabs read as minimized.
+    /// while it is shown.
     func track(_ window: Window) {
         if placements[window.id] == nil {
             // AX only lists windows on a Space that is on screen; the rest are classified when theirs is. Off, new
@@ -379,7 +379,7 @@ final class Coordinator {
             placements[window.id]!.space = nil
             return
         }
-        let new = window.isMinimized ? nil : key(of: window)
+        let new = window.isNormal ? key(of: window) : nil
         guard old != new, heldTabs[window.id] == nil else { return }
         if let old { edit(old) { $0.remove(window.id) } }
         // A window coming from another Space's tree is moving, not switching tabs: tabs share a Space.
@@ -403,13 +403,6 @@ final class Coordinator {
         guard let placement = placements.removeValue(forKey: id), let space = placement.space,
               !takeOverTile(of: id, in: space) else { return }
         edit(space) { $0.remove(id) }
-    }
-
-    func release(_ id: WindowID) {
-        guard let space = placements.removeValue(forKey: id)?.space else { return }
-        print("\(stamp()) frames: window \(id) left its tile on Space \(space), it has no Accessibility element")
-        fflush(stdout)
-        if !takeOverTile(of: id, in: space) { edit(space) { $0.remove(id) } }
     }
 
     /// The front app's frontmost document window on a current Space.
@@ -589,7 +582,6 @@ final class Coordinator {
                     let remaining = self.applying[key, default: 0] - 1
                     self.applying[key] = remaining > 0 ? remaining : nil
                     guard self.enabled, self.applier.allows(permit) else { return }
-                    for result in results where self.applier.isElementless(result.job.id) { self.release(result.job.id) }
                     for result in results {
                         if let got = result.got, self.animator.isResting(result.job.id, at: got, for: result.job.frame) {
                             self.frameRecovery[result.job.id] = nil
