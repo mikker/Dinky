@@ -91,6 +91,13 @@ struct ConfigTests {
         assertError("workspaces = 5\r\n\r\n[gaps]\r\nouter = 'wide'\r\n", path: "gaps.outer", line: 4, contains: "expected")
     }
 
+    @Test func `Warnings and errors find their line under a table header with a comment`() throws {
+        let config = try Config.parse("[master] # the big window\norientation = 'left'\n")
+        #expect(config.warnings.map(\.line) == [2])
+        assertError("[master]   # the big window\nsize = 0.95\n", path: "master.size", line: 2, contains: "0.1 to 0.9")
+        assertError("[gaps]\ninner = 4\n[ master ] # ]\nsize = 0.95\n", path: "master.size", line: 4, contains: "0.1 to 0.9")
+    }
+
     @Test func `Config lines break on CRLF, LF and CR only and join back to the text`() {
         let text = "a\r\nb\nc\rd\u{0C}e\u{2028}f"
         let lines = configLines(text)

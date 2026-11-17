@@ -68,7 +68,7 @@ func lineNumber(of path: String, in toml: String) -> Int? {
         let line = rawLine.content.trimmingCharacters(in: .whitespaces)
         let full: [String]
         if line.hasPrefix("[") {
-            header = keyParts(line.trimmingCharacters(in: CharacterSet(charactersIn: "[] ")))
+            header = keyParts(tableKey(line))
             full = header
         } else if let equals = line.firstIndex(of: "="), !line.hasPrefix("#") {
             full = header + keyParts(String(line[..<equals]))
@@ -81,6 +81,23 @@ func lineNumber(of path: String, in toml: String) -> Int? {
         }
     }
     return best?.line
+}
+
+/// The key of a `[table]` or `[[table]]` line, without its brackets or a comment after them.
+private func tableKey(_ line: String) -> String {
+    var key = ""
+    var quote: Character?
+    for character in line.drop(while: { $0 == "[" }) {
+        if let open = quote {
+            if character == open { quote = nil }
+        } else if character == "\"" || character == "'" {
+            quote = character
+        } else if character == "]" {
+            break
+        }
+        key.append(character)
+    }
+    return key
 }
 
 private func keyParts(_ key: String) -> [String] {
