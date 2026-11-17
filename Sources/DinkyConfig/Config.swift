@@ -125,15 +125,15 @@ public struct Config: Equatable {
         workspaces = try t.int("workspaces") ?? workspaces
         guard workspaces >= 1 else { throw ConfigError(path: "workspaces", "must be at least 1") }
         if let assignments = try t.table("workspace-to-display") {
-            // `01` and `+1` name workspace 1 too: they load as 1 with a warning. When several keys name one
-            // workspace, the first in the file wins and the rest are ignored.
+            // `01` and `+1` name workspace 1 too, as they always have, with a warning. When several keys name one
+            // workspace, the last in the file wins, as it always has, and the others are ignored with a warning.
             var winningKeys: [Int: String] = [:]
             var keyCounts: [Int: Int] = [:]
             for key in assignments.keys {
                 guard let n = Int(key), (1...workspaces).contains(n) else {
                     throw ConfigError(path: assignments.path(key), "'\(key)' is not a workspace number from 1 to \(workspaces)")
                 }
-                if winningKeys[n] == nil { winningKeys[n] = key }
+                winningKeys[n] = key
                 keyCounts[n, default: 0] += 1
             }
             for key in assignments.keys {
@@ -143,7 +143,7 @@ public struct Config: Equatable {
                     throw ConfigError(path: assignments.path(key), "a display pattern can't be empty")
                 }
                 guard winningKeys[n] == key else {
-                    assignments.warn(key, "ignored: workspace \(n) is already set by '\(winningKeys[n]!)'")
+                    assignments.warn(key, "ignored: workspace \(n) is set again by '\(winningKeys[n]!)'")
                     continue
                 }
                 // While another key names the same workspace, renaming could repeat a key, which TOML rejects, so
@@ -322,8 +322,9 @@ public struct Accordion: Equatable {
     init(_ t: Table) throws {
         padding = try t.int("padding") ?? padding
         if padding < 0 {
-            t.warn("padding", "must be 0 or more; using 0", fix: ConfigFix(replace: String(padding), with: "0"))
-            padding = 0
+            // Older dinky loaded a negative padding as written, so it still does.
+            t.warn("padding", "should be 0 or more; still read as \(padding)",
+                   fix: ConfigFix(replace: String(padding), with: "0"))
         }
         orientation = try t.choice("orientation") ?? orientation
         try t.done()
@@ -396,9 +397,9 @@ public struct Borders: Equatable {
             t.warn("width", "must be a finite number, 0 or more; using the default, \(configNumber(defaultWidth))",
                    fix: ConfigFix(replace: replacement, with: configNumber(defaultWidth)))
         } else if width < 0 {
-            let replacement = configNumber(width)
-            width = 0
-            t.warn("width", "must be 0 or more; using 0", fix: ConfigFix(replace: replacement, with: "0"))
+            // Older dinky loaded a negative width as written, so it still does.
+            let written = configNumber(width)
+            t.warn("width", "should be 0 or more; still read as \(written)", fix: ConfigFix(replace: written, with: "0"))
         }
         activeColor = try t.color("active-color") ?? activeColor
         inactiveColor = try t.color("inactive-color") ?? inactiveColor

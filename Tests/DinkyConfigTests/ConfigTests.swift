@@ -374,43 +374,45 @@ struct ConfigTests {
         assertError("[accordion]\norientation = 'sideways'\n", path: "accordion.orientation", line: 2, contains: "'auto', 'keep'")
     }
 
-    @Test func `Negative sizes clamp with warnings`() throws {
+    @Test func `Negative sizes load as written, with warnings`() throws {
+        // Older dinky loaded these values as written, so they still do; the warning suggests 0.
         let inner = try Config.parse("[gaps]\ninner = -4\n")
-        #expect(inner.gaps.inner == Inner(0))
-        #expect(inner.warnings == [ConfigWarning(path: "gaps.inner", "must be 0 or more; using 0", line: 2,
+        #expect(inner.gaps.inner == Inner(-4))
+        #expect(inner.warnings == [ConfigWarning(path: "gaps.inner", "should be 0 or more; still read as -4", line: 2,
                                                   fix: ConfigFix(replace: "-4", with: "0"))])
 
         let innerTable = try Config.parse("[gaps]\ninner = { horizontal = 8, vertical = -1 }\n")
-        #expect(innerTable.gaps.inner == Inner(horizontal: 8, vertical: 0))
-        #expect(innerTable.warnings == [ConfigWarning(path: "gaps.inner.vertical", "must be 0 or more; using 0", line: 2,
-                                                       fix: ConfigFix(replace: "-1", with: "0"))])
+        #expect(innerTable.gaps.inner == Inner(horizontal: 8, vertical: -1))
+        #expect(innerTable.warnings == [ConfigWarning(path: "gaps.inner.vertical", "should be 0 or more; still read as -1",
+                                                       line: 2, fix: ConfigFix(replace: "-1", with: "0"))])
 
         let outer = try Config.parse("[gaps]\nouter = -8\n")
-        #expect(outer.gaps.outer == Sides(0))
-        #expect(outer.warnings == [ConfigWarning(path: "gaps.outer", "must be 0 or more; using 0", line: 2,
+        #expect(outer.gaps.outer == Sides(-8))
+        #expect(outer.warnings == [ConfigWarning(path: "gaps.outer", "should be 0 or more; still read as -8", line: 2,
                                                   fix: ConfigFix(replace: "-8", with: "0"))])
 
         let outerTable = try Config.parse("[gaps]\nouter = { top = 44, left = -8 }\n")
-        #expect(outerTable.gaps.outer == Sides(top: 44, bottom: 8, left: 0, right: 8))
-        #expect(outerTable.warnings == [ConfigWarning(path: "gaps.outer.left", "must be 0 or more; using 0", line: 2,
-                                                       fix: ConfigFix(replace: "-8", with: "0"))])
+        #expect(outerTable.gaps.outer == Sides(top: 44, bottom: 8, left: -8, right: 8))
+        #expect(outerTable.warnings == [ConfigWarning(path: "gaps.outer.left", "should be 0 or more; still read as -8",
+                                                       line: 2, fix: ConfigFix(replace: "-8", with: "0"))])
 
         let display = try Config.parse("[display.main.gaps]\nouter = -8\n")
         let patch = display.displays[0].gaps
-        #expect([patch.top, patch.bottom, patch.left, patch.right] == [0, 0, 0, 0])
-        #expect(display.warnings == [ConfigWarning(path: "display.main.gaps.outer", "must be 0 or more; using 0", line: 2,
-                                                   fix: ConfigFix(replace: "-8", with: "0"))])
+        #expect([patch.top, patch.bottom, patch.left, patch.right] == [-8, -8, -8, -8])
+        #expect(display.warnings == [ConfigWarning(path: "display.main.gaps.outer", "should be 0 or more; still read as -8",
+                                                   line: 2, fix: ConfigFix(replace: "-8", with: "0"))])
 
         let accordion = try Config.parse("[accordion]\npadding = -5\n")
-        #expect(accordion.accordion.padding == 0)
-        #expect(accordion.warnings == [ConfigWarning(path: "accordion.padding", "must be 0 or more; using 0", line: 2,
-                                                      fix: ConfigFix(replace: "-5", with: "0"))])
+        #expect(accordion.accordion.padding == -5)
+        #expect(accordion.warnings == [ConfigWarning(path: "accordion.padding", "should be 0 or more; still read as -5",
+                                                      line: 2, fix: ConfigFix(replace: "-5", with: "0"))])
 
-        for value in ["-2", "-2.0", "-2.5"] {
+        for (value, number) in [("-2", -2.0), ("-2.0", -2.0), ("-2.5", -2.5)] {
             let config = try Config.parse("[borders]\nwidth = \(value)\n")
-            #expect(config.borders.width == 0)
-            #expect(config.warnings == [ConfigWarning(path: "borders.width", "must be 0 or more; using 0", line: 2,
-                                                       fix: ConfigFix(replace: value == "-2.5" ? "-2.5" : "-2", with: "0"))])
+            let written = number == -2.5 ? "-2.5" : "-2"
+            #expect(config.borders.width == number)
+            #expect(config.warnings == [ConfigWarning(path: "borders.width", "should be 0 or more; still read as \(written)",
+                                                       line: 2, fix: ConfigFix(replace: written, with: "0"))])
         }
 
         // The fix replaces the sign too only when it is a minus: `+inf` becomes `+4`, still 4.

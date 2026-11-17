@@ -68,12 +68,11 @@ public struct GapsPatch: Equatable {
         try t.done()
     }
 
-    /// A gap in points, which can't be negative.
+    /// A gap in points. A negative gap warns but loads as written, as it did in older dinky.
     private static func points(_ t: Table, _ key: String) throws -> Int? {
         guard let value = try t.int(key) else { return nil }
         if value < 0 {
-            t.warn(key, "must be 0 or more; using 0", fix: ConfigFix(replace: String(value), with: "0"))
-            return 0
+            t.warn(key, "should be 0 or more; still read as \(value)", fix: ConfigFix(replace: String(value), with: "0"))
         }
         return value
     }

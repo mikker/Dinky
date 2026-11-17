@@ -10,12 +10,12 @@
 
 ### Fixes
 
-- Negative gaps and accordion padding now load as 0, negative border widths as 0, `inf` or `nan` border widths as the default, and `01` or `+1` as the plain workspace number in `[workspace-to-display]`, where the first of two keys naming one workspace wins. Each is reported with a warning and a suggested fix. Before, they were accepted silently, and `01` and `1` overrode each other.
+- Negative gaps, accordion padding and border widths, and workspace numbers written as `01` or `+1` in `[workspace-to-display]`, still load as before but now give a warning with a suggested fix, as does a workspace named by two keys there, where the last still wins. Before, nothing said they were out of range or that one key overrode the other. An `inf` or `nan` border width now loads as the default, with a warning; before, it was accepted as written.
 - `dinky doctor` warns about a `[workspace.<number>]` table past the last workspace. Before, nothing said the table did nothing.
 
 ### Other
 
-- The configuration reference says which values the config accepts and how legacy values are handled: negative gaps, accordion padding and border widths load as 0, `inf` or `nan` border widths load as the default, and `01` or `+1` load as the plain workspace number in `[workspace-to-display]`.
+- The configuration reference says which values the config accepts and how others are handled: negative gaps, accordion padding and border widths and `01` or `+1` workspace keys in `[workspace-to-display]` still load as written, with a warning, and `inf` or `nan` border widths load as the default.
 - A test checks that the configuration page shows the same default config dinky writes on first run.
 - Renamed keys, removed keys and renamed choice values are listed in one table, `Sources/DinkyConfig/KeyChanges.swift`, so a future rename keeps old configs loading, with a warning, by adding one entry.
 

@@ -64,7 +64,8 @@ struct GapsTests {
         assertError("[workspace-to-display]\nfive = 'main'\n", path: "workspace-to-display.five", line: 2, contains: "not a workspace number")
         assertError("[workspace-to-display]\n1 = ''\n", path: "workspace-to-display.1", line: 2, contains: "can't be empty")
         assertError("[workspace-to-display]\n1 = 2\n", path: "workspace-to-display.1", line: 2, contains: "string")
-        // `01` and `+1` are workspace 1 too; the first key naming a workspace wins, the rest are ignored.
+        // `01` and `+1` are workspace 1 too, as they always were; when keys name one workspace, the last wins, as
+        // it always did, and the others are ignored. Each gets a warning.
         let leadingZero = try Config.parse("[workspace-to-display]\n01 = 'main'\n")
         #expect(leadingZero.workspaceDisplays == [1: [.main]])
         #expect(leadingZero.warnings == [
@@ -74,23 +75,23 @@ struct GapsTests {
 
         // No rename fix while the plain key is there: applying it would repeat the key `1`.
         let zeroFirst = try Config.parse("[workspace-to-display]\n01 = 'main'\n1 = 'secondary'\n")
-        #expect(zeroFirst.workspaceDisplays == [1: [.main]])
+        #expect(zeroFirst.workspaceDisplays == [1: [.secondary]])
         #expect(zeroFirst.warnings == [
-            ConfigWarning(path: "workspace-to-display.01", "'01' is workspace 1; write it as '1'", line: 2),
-            ConfigWarning(path: "workspace-to-display.1", "ignored: workspace 1 is already set by '01'", line: 3),
+            ConfigWarning(path: "workspace-to-display.01", "ignored: workspace 1 is set again by '1'", line: 2),
         ])
 
         let plainFirst = try Config.parse("[workspace-to-display]\n1 = 'secondary'\n01 = 'main'\n")
-        #expect(plainFirst.workspaceDisplays == [1: [.secondary]])
+        #expect(plainFirst.workspaceDisplays == [1: [.main]])
         #expect(plainFirst.warnings == [
-            ConfigWarning(path: "workspace-to-display.01", "ignored: workspace 1 is already set by '1'", line: 3),
+            ConfigWarning(path: "workspace-to-display.1", "ignored: workspace 1 is set again by '01'", line: 2),
+            ConfigWarning(path: "workspace-to-display.01", "'01' is workspace 1; write it as '1'", line: 3),
         ])
 
-        let firstNonPlain = try Config.parse("[workspace-to-display]\n01 = 'main'\n'+1' = 'secondary'\n")
-        #expect(firstNonPlain.workspaceDisplays == [1: [.main]])
-        #expect(firstNonPlain.warnings == [
-            ConfigWarning(path: "workspace-to-display.01", "'01' is workspace 1; write it as '1'", line: 2),
-            ConfigWarning(path: "workspace-to-display.+1", "ignored: workspace 1 is already set by '01'", line: 3),
+        let twoNonPlain = try Config.parse("[workspace-to-display]\n01 = 'main'\n'+1' = 'secondary'\n")
+        #expect(twoNonPlain.workspaceDisplays == [1: [.secondary]])
+        #expect(twoNonPlain.warnings == [
+            ConfigWarning(path: "workspace-to-display.01", "ignored: workspace 1 is set again by '+1'", line: 2),
+            ConfigWarning(path: "workspace-to-display.+1", "'+1' is workspace 1; write it as '1'", line: 3),
         ])
         assertError("[display.main]\nworkspaces = 1\n", path: "display.main.workspaces", line: 2, contains: "[workspace-to-display]")
     }
