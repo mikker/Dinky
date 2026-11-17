@@ -48,7 +48,7 @@ public enum ConfigIssues {
 
     /// Applies the first matching replacement on each issue's line without re-serialising the TOML.
     public static func applyFixes(_ issues: [ConfigIssue], to toml: String) -> (text: String, applied: [ConfigIssue]) {
-        var lines = splitLines(toml)
+        var lines = configLines(toml)
         var applied: [ConfigIssue] = []
         for issue in issues {
             guard let fix = issue.fix, let lineNumber = issue.line,
@@ -73,27 +73,6 @@ public enum ConfigIssues {
         try FileManager.default.copyItem(at: url, to: backup)
         try result.text.write(to: url, atomically: true, encoding: .utf8)
         return result.applied
-    }
-
-    private struct Line {
-        var content: String
-        let ending: String
-    }
-
-    /// Lines with their own endings, so joining them gives back the text byte for byte. Swift reads `\r\n` as
-    /// one Character, which `isNewline` covers along with `\n` and `\r`.
-    private static func splitLines(_ text: String) -> [Line] {
-        var lines: [Line] = []
-        var start = text.startIndex
-        while start < text.endIndex {
-            guard let newline = text[start...].firstIndex(where: \.isNewline) else {
-                lines.append(Line(content: String(text[start...]), ending: ""))
-                break
-            }
-            lines.append(Line(content: String(text[start..<newline]), ending: String(text[newline])))
-            start = text.index(after: newline)
-        }
-        return lines
     }
 }
 

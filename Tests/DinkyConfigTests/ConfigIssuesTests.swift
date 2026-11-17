@@ -53,14 +53,16 @@ struct ConfigIssuesTests {
         #expect(result.applied.isEmpty)
     }
 
-    @Test func `CRLF line endings are kept and counted as one line break`() {
-        let issue = ConfigIssue(ConfigWarning(path: "old", "rename", line: 2,
-                                              fix: ConfigFix(replace: "old", with: "new")))
+    @Test func `The fixer edits the line the parser names, whatever the line breaks`() throws {
+        for toml in ["[master]\r\norientation = 'left'\r\n", "# a\u{2028}b\n[master]\norientation = 'left'\n"] {
+            let issues = ConfigIssues.issues(error: nil, warnings: try Config.parse(toml).warnings)
+            #expect(issues.map(\.path) == ["master.orientation"])
 
-        let result = ConfigIssues.applyFixes([issue], to: "# keep\r\nold = 1\r\n")
+            let result = ConfigIssues.applyFixes(issues, to: toml)
 
-        #expect(result.text == "# keep\r\nnew = 1\r\n")
-        #expect(result.applied == [issue])
+            #expect(result.text == toml.replacingOccurrences(of: "orientation", with: "side"))
+            #expect(result.applied == issues)
+        }
     }
 
     @Test func `A file without a final newline stays without one`() {
