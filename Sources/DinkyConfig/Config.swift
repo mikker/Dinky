@@ -149,7 +149,7 @@ public struct Config: Equatable {
                 // While another key names the same workspace, renaming could repeat a key, which TOML rejects, so
                 // the fix waits until the ignored key is gone.
                 if String(n) != key {
-                    let fix = keyCounts[n] == 1 ? ConfigFix(replace: key, with: String(n)) : nil
+                    let fix = keyCounts[n] == 1 ? ConfigFix.rename(key, to: String(n)) : nil
                     assignments.warn(key, "'\(key)' is workspace \(n); write it as '\(n)'", fix: fix)
                 }
                 workspaceDisplays[n] = patterns.map(MonitorPattern.init)
@@ -324,7 +324,7 @@ public struct Accordion: Equatable {
         if padding < 0 {
             // Older dinky loaded a negative padding as written, so it still does.
             t.warn("padding", "should be 0 or more; still read as \(padding)",
-                   fix: ConfigFix(replace: String(padding), with: "0"))
+                   fix: .value(of: "padding", String(padding), to: "0"))
         }
         orientation = try t.choice("orientation") ?? orientation
         try t.done()
@@ -395,11 +395,11 @@ public struct Borders: Equatable {
             let replacement = width.sign == .minus ? "-\(token)" : token
             width = defaultWidth
             t.warn("width", "must be a finite number, 0 or more; using the default, \(configNumber(defaultWidth))",
-                   fix: ConfigFix(replace: replacement, with: configNumber(defaultWidth)))
+                   fix: .value(of: "width", replacement, to: configNumber(defaultWidth)))
         } else if width < 0 {
             // Older dinky loaded a negative width as written, so it still does.
             let written = configNumber(width)
-            t.warn("width", "should be 0 or more; still read as \(written)", fix: ConfigFix(replace: written, with: "0"))
+            t.warn("width", "should be 0 or more; still read as \(written)", fix: .value(of: "width", written, to: "0"))
         }
         activeColor = try t.color("active-color") ?? activeColor
         inactiveColor = try t.color("inactive-color") ?? inactiveColor

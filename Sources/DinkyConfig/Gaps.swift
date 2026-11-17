@@ -72,7 +72,7 @@ public struct GapsPatch: Equatable {
     private static func points(_ t: Table, _ key: String) throws -> Int? {
         guard let value = try t.int(key) else { return nil }
         if value < 0 {
-            t.warn(key, "should be 0 or more; still read as \(value)", fix: ConfigFix(replace: String(value), with: "0"))
+            t.warn(key, "should be 0 or more; still read as \(value)", fix: .value(of: key, String(value), to: "0"))
         }
         return value
     }

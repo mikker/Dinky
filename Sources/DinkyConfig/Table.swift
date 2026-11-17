@@ -41,6 +41,7 @@ final class Table {
 
     /// Records a warning at `key`; `parse` fills in its line.
     func warn(_ key: String, _ message: String, fix: ConfigFix? = nil) {
+        assert(fix.map { $0.key == key } ?? true, "a fix edits the pair of the key it warns about")
         warningSink.warnings.append(ConfigWarning(path: path(key), message, fix: fix))
     }
 
@@ -61,7 +62,7 @@ final class Table {
         guard let value = T(rawValue: raw) else {
             if let change = valueChange(for: key, old: raw) {
                 warn(key, "'\(change.old)' was renamed to '\(change.new)' in \(change.version)",
-                     fix: ConfigFix(replace: change.old, with: change.new))
+                     fix: .value(of: key, change.old, to: change.new))
                 return T(rawValue: change.new)
             }
             let choices = T.allCases.map { "'\($0.rawValue)'" }.joined(separator: ", ")
@@ -161,7 +162,7 @@ final class Table {
         used.insert(old)
         if compatibilityWarnings.insert(old).inserted {
             warn(old, "renamed to '\(new)' in \(change.version); the old name still works",
-                 fix: ConfigFix(replace: old, with: new))
+                 fix: .rename(old, to: new))
         }
         return old
     }

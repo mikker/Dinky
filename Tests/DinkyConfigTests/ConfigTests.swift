@@ -72,7 +72,7 @@ struct ConfigTests {
             path: "master.orientation",
             "renamed to 'side' in 0.23; the old name still works",
             line: 2,
-            fix: ConfigFix(replace: "orientation", with: "side")
+            fix: .rename("orientation", to: "side")
         )])
 
         let both = try Config.parse("[master]\norientation = 'left'\nside = 'right'\n")
@@ -133,15 +133,15 @@ struct ConfigTests {
         #expect(config.master.side == .left)
         #expect(config.warnings == [
             ConfigWarning(path: "master.side", "'west' was renamed to 'left' in 1.4", line: 3,
-                          fix: ConfigFix(replace: "west", with: "left")),
+                          fix: .value(of: "side", "west", to: "left")),
             ConfigWarning(path: "rules[0].application", "renamed to 'app-id' in 1.3; the old name still works",
-                          line: 5, fix: ConfigFix(replace: "application", with: "app-id")),
+                          line: 5, fix: .rename("application", to: "app-id")),
             ConfigWarning(path: "obsolete", "removed in 1.2; ignored", line: 1)
         ])
     }
 
     @Test func `Warnings and errors format suggestions`() {
-        let fix = ConfigFix(replace: "old-key", with: "new-key")
+        let fix = ConfigFix.rename("old-key", to: "new-key")
         #expect(ConfigWarning(path: "gaps.inner", "use the new key", line: 2, fix: fix).description ==
                 "line 2, gaps.inner: use the new key (suggestion: replace 'old-key' with 'new-key')")
         #expect(ConfigError(path: "gaps.inner", "use the new key", line: 2, fix: fix).description ==
@@ -379,43 +379,44 @@ struct ConfigTests {
         let inner = try Config.parse("[gaps]\ninner = -4\n")
         #expect(inner.gaps.inner == Inner(-4))
         #expect(inner.warnings == [ConfigWarning(path: "gaps.inner", "should be 0 or more; still read as -4", line: 2,
-                                                  fix: ConfigFix(replace: "-4", with: "0"))])
+                                                  fix: .value(of: "inner", "-4", to: "0"))])
 
         let innerTable = try Config.parse("[gaps]\ninner = { horizontal = 8, vertical = -1 }\n")
         #expect(innerTable.gaps.inner == Inner(horizontal: 8, vertical: -1))
         #expect(innerTable.warnings == [ConfigWarning(path: "gaps.inner.vertical", "should be 0 or more; still read as -1",
-                                                       line: 2, fix: ConfigFix(replace: "-1", with: "0"))])
+                                                       line: 2, fix: .value(of: "vertical", "-1", to: "0"))])
 
         let outer = try Config.parse("[gaps]\nouter = -8\n")
         #expect(outer.gaps.outer == Sides(-8))
         #expect(outer.warnings == [ConfigWarning(path: "gaps.outer", "should be 0 or more; still read as -8", line: 2,
-                                                  fix: ConfigFix(replace: "-8", with: "0"))])
+                                                  fix: .value(of: "outer", "-8", to: "0"))])
 
         let outerTable = try Config.parse("[gaps]\nouter = { top = 44, left = -8 }\n")
         #expect(outerTable.gaps.outer == Sides(top: 44, bottom: 8, left: -8, right: 8))
         #expect(outerTable.warnings == [ConfigWarning(path: "gaps.outer.left", "should be 0 or more; still read as -8",
-                                                       line: 2, fix: ConfigFix(replace: "-8", with: "0"))])
+                                                       line: 2, fix: .value(of: "left", "-8", to: "0"))])
 
         let display = try Config.parse("[display.main.gaps]\nouter = -8\n")
         let patch = display.displays[0].gaps
         #expect([patch.top, patch.bottom, patch.left, patch.right] == [-8, -8, -8, -8])
         #expect(display.warnings == [ConfigWarning(path: "display.main.gaps.outer", "should be 0 or more; still read as -8",
-                                                   line: 2, fix: ConfigFix(replace: "-8", with: "0"))])
+                                                   line: 2, fix: .value(of: "outer", "-8", to: "0"))])
 
         let accordion = try Config.parse("[accordion]\npadding = -5\n")
         #expect(accordion.accordion.padding == -5)
         #expect(accordion.warnings == [ConfigWarning(path: "accordion.padding", "should be 0 or more; still read as -5",
-                                                      line: 2, fix: ConfigFix(replace: "-5", with: "0"))])
+                                                      line: 2, fix: .value(of: "padding", "-5", to: "0"))])
 
         for (value, number) in [("-2", -2.0), ("-2.0", -2.0), ("-2.5", -2.5)] {
             let config = try Config.parse("[borders]\nwidth = \(value)\n")
             let written = number == -2.5 ? "-2.5" : "-2"
             #expect(config.borders.width == number)
             #expect(config.warnings == [ConfigWarning(path: "borders.width", "should be 0 or more; still read as \(written)",
-                                                       line: 2, fix: ConfigFix(replace: written, with: "0"))])
+                                                       line: 2, fix: .value(of: "width", written, to: "0"))])
         }
 
-        // The fix replaces the sign too only when it is a minus: `+inf` becomes `+4`, still 4.
+        // The suggestion keeps a minus sign but not a plus: for `+inf` it names `inf`, which the config issues
+        // window does not find as written, so it leaves that edit to the user.
         for (value, replacement) in [("inf", "inf"), ("+inf", "inf"), ("-inf", "-inf"), ("nan", "nan")] {
             let config = try Config.parse("[borders]\nwidth = \(value)\n")
             #expect(config.borders.width == 4)
@@ -423,7 +424,7 @@ struct ConfigTests {
                 path: "borders.width",
                 "must be a finite number, 0 or more; using the default, 4",
                 line: 2,
-                fix: ConfigFix(replace: replacement, with: "4")
+                fix: .value(of: "width", replacement, to: "4")
             )])
         }
     }

@@ -28,6 +28,82 @@ struct ConfigIssuesTests {
         #expect(paths == ["bad", "two-a", "two-b", "five", "eight", "none"])
     }
 
+    @Test func `Two fixes on one line each edit only their own key's value`() throws {
+        let toml = "gaps = { outer = -40, inner = -4 }\n"
+        let issues = try parsedIssues(toml)
+        #expect(issues.count == 2)
+
+        let result = ConfigIssues.applyFixes(issues, to: toml)
+
+        #expect(result.text == "gaps = { outer = 0, inner = 0 }\n")
+        #expect(result.applied == issues)
+        #expect(try Config.parse(result.text).warnings.isEmpty)
+    }
+
+    @Test func `A fix is declined unless its value is written exactly as it says`() throws {
+        // The suggestions name -2 and inf; the file says -2.0 and +inf. Rather than guess, nothing is written.
+        for toml in ["[borders]\nwidth = -2.0\n", "[borders]\nwidth = +inf\n"] {
+            let issues = try parsedIssues(toml)
+            #expect(issues.count == 1)
+
+            let result = ConfigIssues.applyFixes(issues, to: toml)
+
+            #expect(result.text == toml)
+            #expect(result.applied.isEmpty)
+        }
+    }
+
+    @Test func `Workspace keys are renamed in place, inside their quotes`() throws {
+        let toml = "[workspace-to-display]\n'+2' = 'secondary' # +2\n01 = 'main'\n"
+        let issues = try parsedIssues(toml)
+
+        let result = ConfigIssues.applyFixes(issues, to: toml)
+
+        #expect(result.text == "[workspace-to-display]\n'2' = 'secondary' # +2\n1 = 'main'\n")
+        #expect(result.applied == issues)
+    }
+
+    @Test func `Line numbers count the lines inside multi-line strings`() throws {
+        let toml = "[mode.main]\nalt-h = \"\"\"\nfocus left\"\"\"\n[gaps]\ninner = -4\n"
+        let issues = try parsedIssues(toml)
+        #expect(issues.map(\.line) == [5])
+
+        #expect(ConfigIssues.applyFixes(issues, to: toml).text == toml.replacingOccurrences(of: "-4", with: "0"))
+    }
+
+    @Test func `An edit that matches two pairs on its line is declined`() {
+        let toml = "rules = [{ app-id = 'a', run = 'float' }, { app-id = 'a', run = 'float' }]\n"
+        let issue = ConfigIssue(ConfigWarning(path: "rules[1].app-id", "w", line: 1, fix: .value(of: "app-id", "a", to: "b")))
+
+        let result = ConfigIssues.applyEdits([issue], to: toml)
+
+        #expect(result.text == toml)
+        #expect(result.applied.isEmpty)
+    }
+
+    @Test func `An edit whose result would not load is declined`() {
+        // Renaming orientation while side is set would repeat the key; the parser never suggests it, and if a
+        // fix ever did, the edited text fails to parse and the file is left alone.
+        let toml = "[master]\norientation = 'left'\nside = 'right'\n"
+        let issue = ConfigIssue(ConfigWarning(path: "master.orientation", "w", line: 2,
+                                              fix: .rename("orientation", to: "side")))
+
+        let result = ConfigIssues.applyEdits([issue], to: toml)
+
+        #expect(result.text == toml)
+        #expect(result.applied.isEmpty)
+    }
+
+    @Test func `The same fix twice is applied once`() throws {
+        let toml = "[gaps]\ninner = -4\n"
+        let issues = try parsedIssues(toml)
+
+        let result = ConfigIssues.applyFixes(issues + issues, to: toml)
+
+        #expect(result.text == "[gaps]\ninner = 0\n")
+        #expect(result.applied == issues)
+    }
+
     @Test func `The fixer edits the line the parser names, whatever the line breaks`() throws {
         for toml in ["[master]\r\norientation = 'left'\r\n", "# a\u{2028}b\n[master]\norientation = 'left'\n"] {
             let issues = try parsedIssues(toml)
@@ -104,7 +180,7 @@ struct ConfigIssuesTests {
     }
 
     @Test func `Actions reflect open fixable rows`() {
-        let fix = ConfigFix(replace: "old", with: "new")
+        let fix = ConfigFix.rename("old", to: "new")
         let fixable = ConfigIssue(ConfigWarning("fixable", fix: fix))
         let plain = ConfigIssue(ConfigWarning("plain"))
 

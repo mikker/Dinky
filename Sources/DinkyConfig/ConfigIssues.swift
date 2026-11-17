@@ -37,7 +37,7 @@ public enum ConfigIssues {
     public static let documentationURL = URL(string: "https://github.com/mikker/Dinky/blob/main/docs/configuration.md")!
 
     /// The error first, then warnings in file order so the list reads top to bottom like the config.
-    /// Warnings without a line go last; the sort is stable, so fixes on one line keep their order.
+    /// Warnings without a line go last; the sort is stable, so warnings on one line keep the parser's order.
     public static func issues(error: ConfigError?, warnings: [ConfigWarning]) -> [ConfigIssue] {
         let byLine = warnings.enumerated().sorted { a, b in
             let lineA = a.element.line ?? Int.max, lineB = b.element.line ?? Int.max
@@ -46,23 +46,53 @@ public enum ConfigIssues {
         return (error.map { [ConfigIssue($0)] } ?? []) + byLine.map { ConfigIssue($0.element) }
     }
 
-    /// Applies the first matching replacement on each issue's line without re-serialising the TOML.
+    /// Applies each issue's fix to the one key or value it names, without re-serialising the TOML.
     ///
     /// The issues may be out of date: the window lists what the config said when it last loaded, and the file
     /// can have changed since. So `toml` is parsed again first, and only a fix the parser still reports for that
     /// text, with the same key path, line and edit, is applied. The others are declined.
     public static func applyFixes(_ issues: [ConfigIssue], to toml: String) -> (text: String, applied: [ConfigIssue]) {
         guard let current = try? Config.parse(toml) else { return (toml, []) }
-        var lines = configLines(toml)
+        return applyEdits(issues.filter { isReported($0, in: current.warnings) }, to: toml)
+    }
+
+    /// The edits behind `applyFixes`. A fix is declined when no single pair on its line has the issue's key path
+    /// and the fix's key, when the text there is not exactly `fix.replace`, or when an earlier fix already edits
+    /// that text. If the edited text does not load as a config, every fix is declined and the text is unchanged.
+    static func applyEdits(_ issues: [ConfigIssue], to toml: String) -> (text: String, applied: [ConfigIssue]) {
+        guard let pairs = configPairs(in: toml) else { return (toml, []) }
+        var edits: [(range: Range<String.Index>, with: String)] = []
         var applied: [ConfigIssue] = []
-        for issue in issues where isReported(issue, in: current.warnings) {
-            guard let fix = issue.fix, let lineNumber = issue.line,
-                  lines.indices.contains(lineNumber - 1),
-                  let range = lines[lineNumber - 1].content.range(of: fix.replace) else { continue }
-            lines[lineNumber - 1].content.replaceSubrange(range, with: fix.with)
+        for issue in issues {
+            guard let fix = issue.fix, let range = editRange(of: issue, fix: fix, in: toml, pairs: pairs),
+                  !edits.contains(where: { $0.range.overlaps(range) }) else { continue }
+            edits.append((range, fix.with))
             applied.append(issue)
         }
-        return (lines.map { $0.content + $0.ending }.joined(), applied)
+
+        var text = ""
+        var unchanged = toml.startIndex
+        for edit in edits.sorted(by: { $0.range.lowerBound < $1.range.lowerBound }) {
+            text += toml[unchanged..<edit.range.lowerBound] + edit.with
+            unchanged = edit.range.upperBound
+        }
+        text += toml[unchanged...]
+        guard !applied.isEmpty, (try? Config.parse(text)) != nil else { return (toml, []) }
+        return (text, applied)
+    }
+
+    /// The text `fix` replaces: the key or the value of the only pair on the issue's line whose path is the
+    /// issue's path and whose last key is the fix's key, provided that text is exactly `fix.replace`.
+    private static func editRange(of issue: ConfigIssue, fix: ConfigFix, in toml: String,
+                                  pairs: [ConfigPair]) -> Range<String.Index>? {
+        let path = issue.path.replacingOccurrences(of: #"\[\d+\]"#, with: "", options: .regularExpression)
+        let matches = pairs.filter {
+            $0.line == issue.line && $0.path.last == fix.key && $0.path.joined(separator: ".") == path
+        }
+        guard matches.count == 1, !fix.replace.isEmpty,
+              let range = fix.part == .key ? matches[0].keyRange : matches[0].valueRange,
+              toml[range] == fix.replace else { return nil }
+        return range
     }
 
     private static func isReported(_ issue: ConfigIssue, in warnings: [ConfigWarning]) -> Bool {

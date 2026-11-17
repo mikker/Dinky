@@ -70,7 +70,7 @@ struct GapsTests {
         #expect(leadingZero.workspaceDisplays == [1: [.main]])
         #expect(leadingZero.warnings == [
             ConfigWarning(path: "workspace-to-display.01", "'01' is workspace 1; write it as '1'", line: 2,
-                          fix: ConfigFix(replace: "01", with: "1")),
+                          fix: .rename("01", to: "1")),
         ])
 
         // No rename fix while the plain key is there: applying it would repeat the key `1`.

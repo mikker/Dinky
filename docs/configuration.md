@@ -23,6 +23,9 @@ file is left alone, with the read error shown in the menu.
 - When warnings or an error are present, dinky also opens a small config issues
   window. Apply applies its suggested one-line edits and saves `dinky.toml.bak`
   before changing the config; rows without a suggestion link to this reference.
+  Each edit changes only the key or value its warning names, and only while the
+  file still has that warning there, written as the suggestion shows; any other
+  edit is left to you.
 - The [JSON Schema](schemas/dinky.json) gives completion in editors that read
   Taplo's `#:schema` line, such as Zed or VS Code with Even Better TOML.
 

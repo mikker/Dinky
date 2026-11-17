@@ -1,13 +1,34 @@
 import Foundation
 
-/// A suggested one-line edit for a config issue: replace the first `replace` on the issue's line with `with`.
+/// A suggested one-line edit for a config issue: in the `key = value` pair of `key` on the issue's line, replace
+/// `replace` with `with`, either the key's name or its whole value.
 public struct ConfigFix: Equatable {
+    /// Which side of the pair the edit changes.
+    public enum Part: Equatable {
+        case key, value
+    }
+
     public var replace: String
     public var with: String
+    /// The key whose pair the edit belongs to, as written in its table: `inner` for `gaps = { inner = -4 }`.
+    public var key: String
+    public var part: Part
 
-    public init(replace: String, with: String) {
+    public init(replace: String, with: String, key: String, part: Part) {
         self.replace = replace
         self.with = with
+        self.key = key
+        self.part = part
+    }
+
+    /// Renames `key` to `new`.
+    public static func rename(_ key: String, to new: String) -> ConfigFix {
+        ConfigFix(replace: key, with: new, key: key, part: .key)
+    }
+
+    /// Replaces the value of `key`, written as `old`, with `new`. A string value is compared without its quotes.
+    public static func value(of key: String, _ old: String, to new: String) -> ConfigFix {
+        ConfigFix(replace: old, with: new, key: key, part: .value)
     }
 }
 
