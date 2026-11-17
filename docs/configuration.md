@@ -284,7 +284,8 @@ Workspaces already on a display that stays connected keep their Space IDs, even
 when macOS merges the departing display's Spaces after or between them. This can
 leave workspace numbers out of Mission Control order. That preservation survives
 config reloads. Dinky captures the old workspace/Space/display identities before
-waiting for the new snapshot to settle, so temporarily unlisted Spaces can still
+waiting for the new snapshot to settle. Chained callbacks share that original
+ownership snapshot rather than recapturing temporary hosts. Temporarily unlisted Spaces can still
 be preserved when they reappear on their old display. Changing a workspace's
 display assignment still moves it. A later
 reorder of the display's existing Spaces restores the usual numeric-order policy

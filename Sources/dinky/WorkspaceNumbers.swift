@@ -54,7 +54,7 @@ final class WorkspaceNumbers: WorkspaceNumbering {
                 return followSpaceOrder(model)
             }
             let (connected, disconnected) = (now.subtracting(knownDisplays), knownDisplays.subtracting(now))
-            preserveSurvivingBindings(from: previous, to: fresh)
+            noteTopologyChange(from: previous)
             logSnapshot("before topology change", previous)
             logSnapshot("after topology change", fresh)
             (knownDisplays, main) = (now, nowMain)

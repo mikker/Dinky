@@ -12,23 +12,23 @@ class WorkspaceNumbering {
     private(set) var topologyPending = false
     /// Old workspace/Space/display identities, captured before macOS's transient new Space list.
     /// Keep these across arrangements; the next config reload must not undo preservation.
-    private var survivingBindings: [Int: (space: UInt64, display: String)] = [:]
+    private var topologyHomes: [Int: (space: UInt64, display: String)] = [:]
 
     func preservedSpaces(on displays: [PlanDisplay]) -> Set<UInt64> {
-        Set(survivingBindings.filter { n, home in
+        Set(topologyHomes.filter { n, home in
             binding[n] == home.space && displays.contains { $0.uuid == home.display && $0.spaces.contains(home.space) }
         }.values.map(\.space))
     }
 
-    func preserveSurvivingBindings(from before: [PlanDisplay], to after: [PlanDisplay]) {
+    func noteTopologyChange(from before: [PlanDisplay]) {
+        // Only the first callback has a settled `before`. Further callbacks in this chain may list a
+        // Space on a temporary host, even when its original display is still connected.
+        guard !topologyPending else { return }
         topologyPending = true
-        let surviving = Set(after.map(\.uuid))
-        survivingBindings = survivingBindings.filter { binding[$0.key] == $0.value.space && surviving.contains($0.value.display) }
-        // A surviving display may briefly omit some or all of its Spaces. Resolve captured identities
-        // against the settled snapshot when planning, never against this first topology callback.
+        topologyHomes = [:]
         for (n, space) in binding {
-            guard let old = before.first(where: { $0.spaces.contains(space) && surviving.contains($0.uuid) }) else { continue }
-            survivingBindings[n] = (space, old.uuid)
+            guard let old = before.first(where: { $0.spaces.contains(space) }) else { continue }
+            topologyHomes[n] = (space, old.uuid)
         }
     }
 
@@ -46,7 +46,7 @@ class WorkspaceNumbering {
         for display in after {
             guard let old = before.first(where: { $0.uuid == display.uuid }),
                   old.spaces != display.spaces, Set(old.spaces) == Set(display.spaces) else { continue }
-            survivingBindings = survivingBindings.filter { $0.value.display != display.uuid }
+            topologyHomes = topologyHomes.filter { $0.value.display != display.uuid }
         }
     }
 
