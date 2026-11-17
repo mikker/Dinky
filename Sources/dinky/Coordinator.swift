@@ -359,7 +359,7 @@ final class Coordinator {
     }
 
     /// Classifies a window the first time it is on screen, then keeps it in the tree of its current Space
-    /// while it is shown: minimized windows, windows of hidden apps and inactive tabs read as minimized.
+    /// while it is shown.
     func track(_ window: Window) {
         if placements[window.id] == nil {
             // AX only lists windows on a Space that is on screen; the rest are classified when theirs is. Off, new
@@ -379,7 +379,7 @@ final class Coordinator {
             placements[window.id]!.space = nil
             return
         }
-        let new = window.isMinimized ? nil : key(of: window)
+        let new = window.isNormal ? key(of: window) : nil
         guard old != new, heldTabs[window.id] == nil else { return }
         if let old { edit(old) { $0.remove(window.id) } }
         // A window coming from another Space's tree is moving, not switching tabs: tabs share a Space.
