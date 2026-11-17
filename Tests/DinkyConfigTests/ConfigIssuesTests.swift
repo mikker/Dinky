@@ -3,15 +3,14 @@ import Testing
 @testable import DinkyConfig
 
 struct ConfigIssuesTests {
-    @Test func `Fixes change only their spans and preserve comments`() {
-        let issue = ConfigIssue(ConfigWarning(path: "old", "rename", line: 2,
-                                              fix: ConfigFix(replace: "old", with: "new")))
-        let toml = "# keep\nold = 1 # keep\nother = 2\n"
+    @Test func `Fixes change only their spans and preserve comments`() throws {
+        let toml = "# orientation\n[master] # orientation\norientation = 'left' # orientation\n"
+        let issues = try parsedIssues(toml)
 
-        let result = ConfigIssues.applyFixes([issue], to: toml)
+        let result = ConfigIssues.applyFixes(issues, to: toml)
 
-        #expect(result.text == "# keep\nnew = 1 # keep\nother = 2\n")
-        #expect(result.applied == [issue])
+        #expect(result.text == "# orientation\n[master] # orientation\nside = 'left' # orientation\n")
+        #expect(result.applied == issues)
     }
 
     @Test func `Warnings are listed by line after the error, keeping order within a line`() {
@@ -29,33 +28,9 @@ struct ConfigIssuesTests {
         #expect(paths == ["bad", "two-a", "two-b", "five", "eight", "none"])
     }
 
-    @Test func `Several fixes on one line apply in order`() {
-        let issues = [
-            ConfigIssue(ConfigWarning(path: "one", "first", line: 1,
-                                      fix: ConfigFix(replace: "old", with: "new"))),
-            ConfigIssue(ConfigWarning(path: "two", "second", line: 1,
-                                      fix: ConfigFix(replace: "new", with: "final")))
-        ]
-
-        let result = ConfigIssues.applyFixes(issues, to: "old = 1\n")
-
-        #expect(result.text == "final = 1\n")
-        #expect(result.applied == issues)
-    }
-
-    @Test func `A fix missing from its line is skipped`() {
-        let issue = ConfigIssue(ConfigWarning(path: "missing", "not here", line: 2,
-                                              fix: ConfigFix(replace: "old", with: "new")))
-
-        let result = ConfigIssues.applyFixes([issue], to: "old = 1\nother = 2\n")
-
-        #expect(result.text == "old = 1\nother = 2\n")
-        #expect(result.applied.isEmpty)
-    }
-
     @Test func `The fixer edits the line the parser names, whatever the line breaks`() throws {
         for toml in ["[master]\r\norientation = 'left'\r\n", "# a\u{2028}b\n[master]\norientation = 'left'\n"] {
-            let issues = ConfigIssues.issues(error: nil, warnings: try Config.parse(toml).warnings)
+            let issues = try parsedIssues(toml)
             #expect(issues.map(\.path) == ["master.orientation"])
 
             let result = ConfigIssues.applyFixes(issues, to: toml)
@@ -65,41 +40,44 @@ struct ConfigIssuesTests {
         }
     }
 
-    @Test func `A file without a final newline stays without one`() {
-        let issue = ConfigIssue(ConfigWarning(path: "key", "rename", line: 1,
-                                              fix: ConfigFix(replace: "old", with: "new")))
+    @Test func `A file without a final newline stays without one`() throws {
+        let toml = "[master]\norientation = 'left'"
 
-        #expect(ConfigIssues.applyFixes([issue], to: "old = 1").text == "new = 1")
+        #expect(ConfigIssues.applyFixes(try parsedIssues(toml), to: toml).text == "[master]\nside = 'left'")
     }
 
     @Test func `File fixes back up the old file and write the new file`() throws {
         let directory = try temporaryDirectory()
         let url = directory.appending(path: "dinky.toml")
-        let old = "old = 1\n"
+        let old = "[master]\norientation = 'left'\n"
         try old.write(to: url, atomically: false, encoding: .utf8)
-        let issue = ConfigIssue(ConfigWarning(path: "key", "rename", line: 1,
-                                              fix: ConfigFix(replace: "old", with: "new")))
+        let issues = try parsedIssues(old)
 
-        let applied = try ConfigIssues.applyFixes([issue], at: url)
+        let applied = try ConfigIssues.applyFixes(issues, at: url)
 
-        #expect(applied == [issue])
-        #expect(try String(contentsOf: url, encoding: .utf8) == "new = 1\n")
+        #expect(applied == issues)
+        #expect(try String(contentsOf: url, encoding: .utf8) == "[master]\nside = 'left'\n")
         #expect(try String(contentsOf: url.appendingPathExtension("bak"), encoding: .utf8) == old)
     }
 
-    @Test func `File fixes write nothing when no fix applies`() throws {
-        let directory = try temporaryDirectory()
-        let url = directory.appending(path: "dinky.toml")
-        let old = "old = 1\n"
-        try old.write(to: url, atomically: false, encoding: .utf8)
-        let issue = ConfigIssue(ConfigWarning(path: "key", "missing", line: 1,
-                                              fix: ConfigFix(replace: "absent", with: "new")))
+    @Test func `Outdated fixes are declined instead of applied to another setting`() throws {
+        let issues = try parsedIssues("[gaps]\ninner = -4\n")
+        #expect(issues.count == 1)
+        let url = try temporaryDirectory().appending(path: "dinky.toml")
 
-        let applied = try ConfigIssues.applyFixes([issue], at: url)
+        // Another key now holds the line, or the key moved to another line: the fix no longer matches a warning.
+        for current in ["[gaps]\nouter = -40\n", "# moved\n[gaps]\ninner = -4\n"] {
+            try current.write(to: url, atomically: false, encoding: .utf8)
 
-        #expect(applied.isEmpty)
-        #expect(try String(contentsOf: url, encoding: .utf8) == old)
-        #expect(!FileManager.default.fileExists(atPath: url.appendingPathExtension("bak").path))
+            #expect(try ConfigIssues.applyFixes(issues, at: url).isEmpty)
+            #expect(try String(contentsOf: url, encoding: .utf8) == current)
+            #expect(!FileManager.default.fileExists(atPath: url.appendingPathExtension("bak").path))
+        }
+
+        // The warning is still reported where it was, so the fix applies even though the file changed elsewhere.
+        try "[gaps]\ninner = -4\nouter = 8\n".write(to: url, atomically: false, encoding: .utf8)
+        #expect(try ConfigIssues.applyFixes(issues, at: url) == issues)
+        #expect(try String(contentsOf: url, encoding: .utf8) == "[gaps]\ninner = 0\nouter = 8\n")
     }
 
     @Test func `Issue lists cross off fixed rows and reopen returning rows`() {
@@ -145,6 +123,11 @@ struct ConfigIssuesTests {
 
         #expect(fixed.applied == issues)
         #expect(try Config.parse(fixed.text).warnings.isEmpty)
+    }
+
+    /// The issues the window would list for `toml`.
+    private func parsedIssues(_ toml: String) throws -> [ConfigIssue] {
+        ConfigIssues.issues(error: nil, warnings: try Config.parse(toml).warnings)
     }
 
     private func temporaryDirectory() throws -> URL {

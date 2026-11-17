@@ -47,10 +47,15 @@ public enum ConfigIssues {
     }
 
     /// Applies the first matching replacement on each issue's line without re-serialising the TOML.
+    ///
+    /// The issues may be out of date: the window lists what the config said when it last loaded, and the file
+    /// can have changed since. So `toml` is parsed again first, and only a fix the parser still reports for that
+    /// text, with the same key path, line and edit, is applied. The others are declined.
     public static func applyFixes(_ issues: [ConfigIssue], to toml: String) -> (text: String, applied: [ConfigIssue]) {
+        guard let current = try? Config.parse(toml) else { return (toml, []) }
         var lines = configLines(toml)
         var applied: [ConfigIssue] = []
-        for issue in issues {
+        for issue in issues where isReported(issue, in: current.warnings) {
             guard let fix = issue.fix, let lineNumber = issue.line,
                   lines.indices.contains(lineNumber - 1),
                   let range = lines[lineNumber - 1].content.range(of: fix.replace) else { continue }
@@ -60,7 +65,12 @@ public enum ConfigIssues {
         return (lines.map { $0.content + $0.ending }.joined(), applied)
     }
 
-    /// Applies the fixes to the file at `url`, first copying it to `<name>.bak`. Writes nothing when no fix applies.
+    private static func isReported(_ issue: ConfigIssue, in warnings: [ConfigWarning]) -> Bool {
+        issue.fix != nil && warnings.contains { $0.path == issue.path && $0.line == issue.line && $0.fix == issue.fix }
+    }
+
+    /// Applies the fixes to the file at `url` as it is now, first copying it to `<name>.bak`. Writes nothing when
+    /// no fix applies.
     public static func applyFixes(_ issues: [ConfigIssue], at url: URL) throws -> [ConfigIssue] {
         let original = try String(contentsOf: url, encoding: .utf8)
         let result = applyFixes(issues, to: original)
