@@ -4,7 +4,7 @@
 
 ### Fixes
 
-- A window an app hides without minimizing gives up its tile, instead of holding an invisible tile until dinky restarts or retiles
+- A window an app hides without minimizing gives up its tile, instead of holding an invisible tile until dinky restarts or retiles (#79, thanks @sndrgrdn).
 - Rounded window borders get a subtle 5% optical thickening at the corner midpoints, leaving straight edges, inner outlines and square corners unchanged (#77, thanks @albertomalossi).
 - `dinky doctor` points to System Settings to turn off slow Cmd-Tab Space switching, instead of onboarding's one-time step (#76, thanks @ChrisGVE).
 
