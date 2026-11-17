@@ -4,6 +4,7 @@
 
 ### Fixes
 
+- Keep workspace Spaces already on a surviving display when docking or undocking; only remove a visible leftover Space after confirming a switch away. Timestamp display changes and log before/after Space snapshots for diagnosis (#80, thanks Tim Tilberg @ttilberg).
 - A window an app hides without minimizing gives up its tile, instead of holding an invisible tile until dinky restarts or retiles (#79, thanks @sndrgrdn).
 - Rounded window borders get a subtle 5% optical thickening at the corner midpoints, leaving straight edges, inner outlines and square corners unchanged (#77, thanks @albertomalossi).
 - `dinky doctor` points to System Settings to turn off slow Cmd-Tab Space switching, instead of onboarding's one-time step (#76, thanks @ChrisGVE).

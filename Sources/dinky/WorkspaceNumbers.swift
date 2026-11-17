@@ -16,7 +16,6 @@ final class WorkspaceNumbers: WorkspaceNumbering {
     /// Called at the end of every arrangement, once the coordinator has re-read the windows.
     var onArranged: (() -> Void)?
     private var pending: DispatchWorkItem?
-    private var arranging = false
     /// Spaces this removed, whose `spaceDestroyed` events are not news.
     private var removed: Set<UInt64> = []
     /// The displays as the last display change left them.
@@ -41,17 +40,26 @@ final class WorkspaceNumbers: WorkspaceNumbering {
         let model = AppState.shared.displays
         knownDisplays = Set(model.displays.map(\.uuid))
         var main = model.displays.first(where: \.isMain)?.uuid
+        var previous = planDisplays(model)
         // A display coming or going, or another becoming main, moves workspaces. The same displays may have had
         // their Spaces reordered.
         model.observe { [weak self] model in
             guard let self else { return }
+            let fresh = planDisplays(model)
+            defer { previous = fresh }
             let now = Set(model.displays.map(\.uuid))
             let nowMain = model.displays.first(where: \.isMain)?.uuid
-            guard now != knownDisplays || nowMain != main else { return followSpaceOrder(model) }
+            guard now != knownDisplays || nowMain != main else {
+                if !arranging, !topologyPending { acceptSpaceReorders(from: previous, to: fresh) }
+                return followSpaceOrder(model)
+            }
             let (connected, disconnected) = (now.subtracting(knownDisplays), knownDisplays.subtracting(now))
+            noteTopologyChange(from: previous)
+            logSnapshot("before topology change", previous)
+            logSnapshot("after topology change", fresh)
             (knownDisplays, main) = (now, nowMain)
-            if !connected.isEmpty { print("displays: connected \(connected.sorted())") }
-            if !disconnected.isEmpty { print("displays: disconnected \(disconnected.sorted())") }
+            if !connected.isEmpty { print("\(stamp()) displays: connected \(connected.sorted())") }
+            if !disconnected.isEmpty { print("\(stamp()) displays: disconnected \(disconnected.sorted())") }
             fflush(stdout)
             if !connected.isEmpty || !disconnected.isEmpty { displaced.displaysChanged() }
             arrangeSoon()
@@ -77,44 +85,50 @@ final class WorkspaceNumbers: WorkspaceNumbering {
     /// waits for WindowServer to show its result, normally within a poll or two. While dinky is disabled it only
     /// numbers the Spaces as they are, leaving Spaces and windows alone; enabling arranges.
     func arrange() {
-        guard AppState.shared.enabled else {
-            // Windows stay where macOS put them, and homes are noted again from here.
-            if displaced.arranged(enabled: false, completed: false) == .leaveThem {
-                print("workspaces: windows a display change moved while dinky was disabled stay where they are")
-            }
-            return numberInPlace()
-        }
         guard !arranging else { return }
-        // A swipe in flight would land on a Space this may remove.
-        guard !SpaceSwitcher.shared.switching else { return arrangeSoon(after: 0.3) }
-        arranging = true
-        defer { arranging = false }
-        withUpdates { arrangeSpaces() }
+        // A swipe in flight would land on a Space this may remove. Disabled numbering removes nothing.
+        guard !AppState.shared.enabled || !SpaceSwitcher.shared.switching else { return arrangeSoon(after: 0.3) }
+        withArrangement {
+            waitForListedSpaces()
+            if AppState.shared.enabled {
+                arrangeSpaces()
+            } else {
+                // Windows stay where macOS put them, and homes are noted again from here.
+                if displaced.arranged(enabled: false, completed: false) == .leaveThem {
+                    print("\(stamp()) workspaces: windows a display change moved while dinky was disabled stay where they are")
+                }
+                numberInPlace()
+            }
+        }
         fflush(stdout)
         onArranged?()
+    }
+
+    /// A Space can be between displays: WindowServer lists it while CoreGraphics already calls its
+    /// display offline. Wait before either enabled planning or disabled numbering forgets its binding.
+    private func waitForListedSpaces() {
+        func unlisted() -> Bool {
+            let displays = planDisplays()
+            return !Set(binding.values).isSubset(of: displays.flatMap(\.spaces))
+        }
+        if unlisted() { _ = waitUntil(2) { !unlisted() } }
     }
 
     /// Every planner action may refresh displays; the caller's publication scope covers all of them,
     /// recovery, and the coordinator's final read, including incomplete/action-failure exits.
     private func arrangeSpaces() {
-        let model = AppState.shared.displays
         let plan = WorkspacePlan(AppState.shared.config)
-        // The plan forgets a workspace whose Space is not listed. One that is only between displays, listed by
-        // WindowServer while CoreGraphics already calls its display offline, gets a moment to reappear.
-        func unlisted() -> Bool {
-            model.reconcile()
-            return !Set(binding.values).isSubset(of: model.displays.flatMap(\.userSpaces))
-        }
-        if unlisted() { _ = waitUntil(2) { !unlisted() } }
+        defer { logSnapshot("after arrangement", planDisplays()) }
+        logSnapshot("before arrangement", planDisplays())
         // Following the Space order, Spaces reordered since the last run are renumbered rather than put back.
-        if AppState.shared.config.followSpaceOrder { renumber(plan, on: planDisplays()) }
+        if AppState.shared.config.followSpaceOrder, !topologyPending { renumber(plan, on: planDisplays()) }
         var completed = false
         for _ in 0..<50 {
             let displays = planDisplays()
             guard !displays.isEmpty else { break }
             let occupied = occupiedSpaces(among: displays.flatMap(\.spaces))
             let before = binding
-            let step = plan.step(displays, binding: binding, occupied: occupied)
+            let step = plan.step(displays, binding: binding, occupied: occupied, preserving: preservedSpaces(on: displays))
             binding = step.binding
             guard let action = step.action else {
                 completed = true
@@ -123,13 +137,13 @@ final class WorkspaceNumbers: WorkspaceNumbering {
             guard perform(action) else {
                 // A workspace whose windows did not all move stays where they are, so the next run moves it again.
                 if case .move = action { binding = before }
-                print("workspaces: stopped; the next display change or config reload tries again")
+                print("\(stamp()) workspaces: stopped; the next display change or config reload tries again")
                 break
             }
         }
         switch displaced.arranged(enabled: true, completed: completed) {
         case .returnThem: returnDisplaced()
-        case .leaveThem: print("workspaces: windows a display change moved off their workspace stay where they are")
+        case .leaveThem: print("\(stamp()) workspaces: windows a display change moved off their workspace stay where they are")
         case .nothing: break
         }
         AppState.shared.coordinator?.reconcile()
@@ -140,29 +154,25 @@ final class WorkspaceNumbers: WorkspaceNumbering {
     /// that are gone, and started disabled there is none. A workspace the step would move stays on the Space its
     /// windows are on; one it would create stays unbound until enabling creates it.
     private func numberInPlace() {
-        withUpdates {
-            let displays = planDisplays()
-            let plan = WorkspacePlan(AppState.shared.config)
-            if AppState.shared.config.followSpaceOrder { renumber(plan, on: displays) }
-            let step = plan.step(displays, binding: binding, occupied: occupiedSpaces(among: displays.flatMap(\.spaces)))
-            binding = step.binding
-            if case .move(let from, let to) = step.action, let n = binding.first(where: { $0.value == to })?.key {
-                binding[n] = from
-            }
+        let displays = planDisplays()
+        let plan = WorkspacePlan(AppState.shared.config)
+        if AppState.shared.config.followSpaceOrder, !topologyPending { renumber(plan, on: displays) }
+        let step = plan.step(displays, binding: binding, occupied: occupiedSpaces(among: displays.flatMap(\.spaces)), preserving: preservedSpaces(on: displays))
+        binding = step.binding
+        if case .move(let from, let to) = step.action, let n = binding.first(where: { $0.value == to })?.key {
+            binding[n] = from
         }
-        fflush(stdout)
-        onArranged?()
     }
 
     /// With `follow-space-order`, renumbers the workspaces to the order their Spaces now have, after a drag in
     /// Mission Control or macOS rearranging them. Only the numbers change; windows stay on their Spaces.
     private func followSpaceOrder(_ model: DisplayModel) {
-        guard AppState.shared.config.followSpaceOrder, !arranging else { return }
+        guard AppState.shared.config.followSpaceOrder, !arranging, !topologyPending else { return }
         withUpdates {
             let start = binding
             renumber(WorkspacePlan(AppState.shared.config), on: planDisplays(model))
             guard binding != start else { return }
-            print("workspaces: renumbered to follow the Space order")
+            print("\(stamp()) workspaces: renumbered to follow the Space order")
             // Layout settings go by workspace number, so each Space's are resolved again.
             if AppState.shared.enabled { AppState.shared.coordinator?.reconcile() }
         }
@@ -222,7 +232,7 @@ final class WorkspaceNumbers: WorkspaceNumbering {
         }
         let arrived = { targets.filter { dinky_window_space_id($0.key) == $0.value }.count }
         _ = waitUntil(1) { arrived() == targets.count }
-        print("workspaces: returned \(arrived()) of \(targets.count) windows a display change moved off their workspace")
+        print("\(stamp()) workspaces: returned \(arrived()) of \(targets.count) windows a display change moved off their workspace")
     }
 
     /// The Spaces among `spaces` with windows dinky would tile or restore there: helper windows some apps keep
@@ -245,10 +255,10 @@ final class WorkspaceNumbers: WorkspaceNumbering {
             let name = model.displays.first { $0.uuid == uuid }.map(displayName) ?? uuid
             let space = dinky_create_space(uuid as CFString)
             guard space != 0, waitUntil(2, { model.reconcile(); return model.display(containingSpace: space) != nil }) else {
-                print("workspaces: could not create a Space on \(name)")
+                print("\(stamp()) workspaces: could not create a Space on \(name)")
                 return false
             }
-            print("workspaces: created Space \(space) on \(name)")
+            print("\(stamp()) workspaces: created Space \(space) on \(name)")
             return true
 
         case .move(let from, let to):
@@ -260,30 +270,48 @@ final class WorkspaceNumbers: WorkspaceNumbering {
             }
             guard !occupied(from) else {
                 AppState.shared.coordinator?.moveTree(from: to, to: from)
-                print("workspaces: windows stayed on Space \(from) instead of moving to \(to)")
+                print("\(stamp()) workspaces: windows stayed on Space \(from) instead of moving to \(to)")
                 return false
             }
-            print("workspaces: moved the windows of Space \(from) to \(to)")
+            print("\(stamp()) workspaces: moved the windows of Space \(from) to \(to)")
             return true
 
         case .remove(let space):
-            // Removing the Space a display shows drops it to its first Space; leave for a workspace first.
-            if let display = model.displays.first(where: { $0.currentSpaceID == space }) {
-                let previous = model.previousSpace(on: display).flatMap { display.userSpaces.contains($0) && number(of: $0) != nil ? $0 : nil }
-                if let target = previous ?? workspaces(on: display).first.flatMap(space(of:)), target != space,
-                   switchSpace(toSpaceID: target, on: display) {
-                    _ = waitUntil(1.5) { dinky_current_space_id(display.uuid as CFString) == target }
-                }
-            }
-            guard dinky_destroy_space(space),
+            let removal = SpaceRemoval(
+                snapshot: { self.planDisplays() },
+                destinations: { uuid in
+                    guard let display = model.displays.first(where: { $0.uuid == uuid }) else { return [] }
+                    let previous = model.previousSpace(on: display).flatMap { self.number(of: $0) != nil ? $0 : nil }
+                    return (previous.map { [$0] } ?? []) + self.workspaces(on: display).compactMap(self.space(of:))
+                },
+                switchTo: { target, uuid in
+                    guard let display = model.displays.first(where: { $0.uuid == uuid }) else { return false }
+                    return switchSpace(toSpaceID: target, on: display)
+                },
+                wait: { waitUntil(1.5, $0) },
+                canRemove: { self.number(of: $0) == nil && !self.occupied($0) },
+                destroy: { dinky_destroy_space($0) }
+            )
+            guard removal.remove(space),
                   waitUntil(2, { model.reconcile(); return model.display(containingSpace: space) == nil }) else {
-                print("workspaces: could not remove Space \(space)")
+                print("\(stamp()) workspaces: could not safely remove Space \(space)")
+                logSnapshot("removal stopped", planDisplays())
                 return false
             }
             removed.insert(space)
-            print("workspaces: removed Space \(space)")
+            print("\(stamp()) workspaces: removed Space \(space)")
             return true
         }
+    }
+
+    private func logSnapshot(_ phase: String, _ displays: [PlanDisplay]) {
+        let state = displays.map { display in
+            let spaces = display.spaces.map { space in
+                "\(space)" + (number(of: space).map { "(w\($0))" } ?? "(unbound)")
+            }.joined(separator: ",")
+            return "\(display.monitor.name) [\(display.uuid)] main=\(display.monitor.isMain) current=\(display.current) spaces=[\(spaces)]"
+        }.joined(separator: "; ")
+        print("\(stamp()) displays: \(phase): \(state)")
     }
 
     private func displayName(_ display: Display) -> String {

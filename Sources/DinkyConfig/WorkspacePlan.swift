@@ -70,7 +70,9 @@ public struct WorkspacePlan {
     /// changes Space; windows only ever go to an empty Space, so two sets never mix. Then empty Spaces no
     /// workspace is on are removed; one is kept on a display with no workspace, which macOS requires anyway.
     /// A leftover Space with windows is left alone.
-    public func step(_ displays: [PlanDisplay], binding: [Int: UInt64], occupied: Set<UInt64>) -> PlanStep {
+    /// `preserving` exempts surviving-display bindings from numeric order after a topology change.
+    /// They reserve their Spaces but do not constrain where arriving workspaces may be placed.
+    public func step(_ displays: [PlanDisplay], binding: [Int: UInt64], occupied: Set<UInt64>, preserving: Set<UInt64> = []) -> PlanStep {
         let all = Set(displays.flatMap(\.spaces))
         // Forget Spaces that are gone and workspaces past the count; one workspace per Space.
         var binding = binding.filter { n, space in numbers.contains(n) && all.contains(space) }
@@ -82,8 +84,8 @@ public struct WorkspacePlan {
         for display in displays {
             var last = -1  // position of the previous workspace's Space on this display
             for n in numbers.filter({ homes[$0] == display.uuid }) {
-                if let space = binding[n], let at = display.spaces.firstIndex(of: space), at > last {
-                    last = at
+                if let space = binding[n], let at = display.spaces.firstIndex(of: space), preserving.contains(space) || at > last {
+                    if !preserving.contains(space) { last = at }
                     continue
                 }
                 let bound = Set(binding.values)
@@ -114,11 +116,11 @@ public struct WorkspacePlan {
     /// on each display, the numbers of the workspaces that live there go, smallest first, to their Spaces from
     /// left to right. Spaces and windows stay where they are, and the numbers are back in the order `step`
     /// keeps, so it has nothing to move. A workspace off its display, or whose Space is gone, keeps its number.
-    public func renumbered(_ displays: [PlanDisplay], binding: [Int: UInt64]) -> [Int: UInt64] {
+    public func renumbered(_ displays: [PlanDisplay], binding: [Int: UInt64], preserving: Set<UInt64> = []) -> [Int: UInt64] {
         let homes = homes(displays)
         var result = binding
         for display in displays {
-            let here = binding.filter { homes[$0.key] == display.uuid && display.spaces.contains($0.value) }
+            let here = binding.filter { homes[$0.key] == display.uuid && display.spaces.contains($0.value) && !preserving.contains($0.value) }
             let spaces = display.spaces.filter { here.values.contains($0) }
             for (n, space) in zip(here.keys.sorted(), spaces) { result[n] = space }
         }

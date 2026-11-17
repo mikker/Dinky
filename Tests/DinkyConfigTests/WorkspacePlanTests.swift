@@ -11,9 +11,9 @@ struct WorkspacePlanTests {
         var actions: [PlanAction] = []
 
         /// Steps until the plan is done, applying each action as WindowServer would.
-        mutating func settle(_ plan: WorkspacePlan, limit: Int = 50) {
+        mutating func settle(_ plan: WorkspacePlan, limit: Int = 50, preserving: Set<UInt64> = []) {
             for _ in 0..<limit {
-                let step = plan.step(displays, binding: binding, occupied: Set(windows.filter { $0.value > 0 }.keys))
+                let step = plan.step(displays, binding: binding, occupied: Set(windows.filter { $0.value > 0 }.keys), preserving: preserving)
                 binding = step.binding
                 guard let action = step.action else { return }
                 actions.append(action)
@@ -112,6 +112,33 @@ struct WorkspacePlanTests {
         world.settle(fivePlusSide)
         #expect(world.actions == [])
         #expect(world.binding[5] == 9)
+    }
+
+    @Test func `Undocking preserves surviving built-in workspaces in either merged order`() {
+        let plan = WorkspacePlan(count: 9, assignments: Dictionary(uniqueKeysWithValues: (6...9).map { ($0, [.name("built-in")]) }))
+        for merged: [UInt64] in [[6, 7, 8, 9, 1, 2, 3, 4, 5], [1, 2, 3, 4, 5, 6, 7, 8, 9], [6, 1, 7, 2, 8, 3, 9, 4, 5]] {
+            var world = World(displays: [Self.display("L", "Built-in", main: true, count: 1, merged)])
+            let original = Dictionary(uniqueKeysWithValues: (1...9).map { ($0, UInt64($0)) })
+            world.binding = original
+            world.windows = [6: 1, 8: 2]
+            world.settle(plan, preserving: [6, 7, 8, 9])
+            world.settle(plan, preserving: [6, 7, 8, 9]) // subsequent arrangement must not undo it
+            #expect(world.binding == original)
+            #expect(world.actions.isEmpty)
+            #expect(world.windows == [6: 1, 8: 2])
+            #expect(plan.renumbered(world.displays, binding: original, preserving: [6, 7, 8, 9]) == original)
+        }
+    }
+
+    @Test func `Preservation does not override a new display assignment`() {
+        let plan = WorkspacePlan(count: 2, assignments: [2: [.secondary]])
+        var world = World(displays: [Self.display("L", "Built-in", main: true, count: 2, [2, 1]),
+                                     Self.display("D", "Dell", main: false, count: 2, [3])])
+        world.binding = [1: 1, 2: 2]
+        world.windows = [2: 1]
+        world.settle(plan, preserving: [2])
+        #expect(world.binding == [1: 1, 2: 3])
+        #expect(world.actions == [.move(from: 2, to: 3), .remove(space: 2)])
     }
 
     @Test func `Fallback patterns and main`() {

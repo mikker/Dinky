@@ -8,6 +8,48 @@ class WorkspaceNumbering {
     /// Window homes while the displays were settled, plus the sample awaiting a second settled tick.
     var homes: [UInt32: Int] = [:]
     var pendingHomes: [UInt32: Int]?
+    private(set) var arranging = false
+    private(set) var topologyPending = false
+    /// Old workspace/Space/display identities, captured before macOS's transient new Space list.
+    /// Keep these across arrangements; the next config reload must not undo preservation.
+    private var topologyHomes: [Int: (space: UInt64, display: String)] = [:]
+
+    func preservedSpaces(on displays: [PlanDisplay]) -> Set<UInt64> {
+        Set(topologyHomes.filter { n, home in
+            binding[n] == home.space && displays.contains { $0.uuid == home.display && $0.spaces.contains(home.space) }
+        }.values.map(\.space))
+    }
+
+    func noteTopologyChange(from before: [PlanDisplay]) {
+        // Only the first callback has a settled `before`. Further callbacks in this chain may list a
+        // Space on a temporary host, even when its original display is still connected.
+        guard !topologyPending else { return }
+        topologyPending = true
+        topologyHomes = [:]
+        for (n, space) in binding {
+            guard let old = before.first(where: { $0.spaces.contains(space) }) else { continue }
+            topologyHomes[n] = (space, old.uuid)
+        }
+    }
+
+    /// Enabled arrangements and disabled numbering share one settlement/publication boundary. Both must
+    /// finish the topology transition so later deliberate reorders are not mistaken for docking fallout.
+    func withArrangement<T>(_ update: () throws -> T) rethrows -> T {
+        arranging = true
+        defer { arranging = false; topologyPending = false }
+        return try withUpdates(update)
+    }
+
+    /// A genuine strip reorder (not a current-Space change or create/remove) restores the ordinary
+    /// numeric-order policy on that display. Topology-induced ordering itself is not a user reorder.
+    func acceptSpaceReorders(from before: [PlanDisplay], to after: [PlanDisplay]) {
+        for display in after {
+            guard let old = before.first(where: { $0.uuid == display.uuid }),
+                  old.spaces != display.spaces, Set(old.spaces) == Set(display.spaces) else { continue }
+            topologyHomes = topologyHomes.filter { $0.value.display != display.uuid }
+        }
+    }
+
     private var observers: [(Set<String>) -> Void] = []
     private var renumberedDisplays: Set<String> = []
     private var updateDepth = 0
@@ -33,7 +75,7 @@ class WorkspaceNumbering {
 
     func renumber(_ plan: WorkspacePlan, on displays: [PlanDisplay]) {
         withUpdates {
-            let updated = plan.renumbered(displays, binding: binding)
+            let updated = plan.renumbered(displays, binding: binding, preserving: preservedSpaces(on: displays))
             guard updated != binding else { return }
             // Do not re-read windows here: macOS may already be pouring them off a disconnecting display.
             // Translate both journal generations through the Space they named before the renumber.
@@ -51,7 +93,7 @@ class WorkspaceNumbering {
         let renumbered = binding == start ? [] : renumberedDisplays
         renumberedDisplays = []
         if binding != start {
-            print("workspaces: " + binding.keys.sorted().map { "\($0)=\(binding[$0]!)" }.joined(separator: " "))
+            print("\(stamp()) workspaces: " + binding.keys.sorted().map { "\($0)=\(binding[$0]!)" }.joined(separator: " "))
         }
         observers.forEach { $0(renumbered) }
     }

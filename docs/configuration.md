@@ -280,6 +280,28 @@ display with no workspaces keeps one unnumbered Space. Windows macOS piles onto
 another workspace when a display goes away, as around sleep, go back to their
 own workspace once the displays settle.
 
+Workspaces already on a display that stays connected keep their Space IDs, even
+when macOS merges the departing display's Spaces after or between them. This can
+leave workspace numbers out of Mission Control order. That preservation survives
+config reloads. Dinky captures the old workspace/Space/display identities before
+waiting for the new snapshot to settle. Chained callbacks share that original
+ownership snapshot rather than recapturing temporary hosts. Temporarily unlisted Spaces can still
+be preserved when they reappear on their old display. Changing a workspace's
+display assignment still moves it. A later
+reorder of the display's existing Spaces restores the usual numeric-order policy
+(or renumbers them with `follow-space-order`). A visible leftover Space is removed
+only after WindowServer confirms a switch to another numbered Space; an unknown
+current Space, failed switch or timeout leaves it alone. While disabled, dinky
+also waits for transiently unlisted Spaces before numbering them without taking
+any actions; that finishes the topology transition so later deliberate reorders
+are followed normally, without needing to enable dinky first.
+
+Display connect/disconnect and arrangement logs include millisecond timestamps
+and before/after snapshots: display name/UUID, main status, current native Space
+ID and ordered Space IDs with workspace bindings. Switch logs describe what
+WindowServer reports, not proof that the physical screen rendered successfully.
+These diagnostics are always enabled; include them when reporting docking issues.
+
 ## `[display.<pattern>]`
 
 Per-display `gaps`, `fullscreen-width` and `lone-window-width`, with the patterns above. Name
