@@ -121,18 +121,17 @@ final class SpaceSwitcher {
             guard let flight = flights[uuid] else { continue }
             let observed = currentSpace(uuid)
             let ms = Double(clock() - flight.startedAt) / 1_000_000
+            let timedOut = clock() - flight.postedAt > timeout
             if flight.posted == 0 {
                 post(on: uuid)  // requested while another display's swipe was being posted
-            } else if observed == flight.posted, observed == flight.target {
-                finish(uuid, String(format: "switch: landed on Space %llu in %.0f ms", observed, ms), landed: true)
+            } else if observed == flight.target, observed == flight.posted || timedOut {
+                finish(uuid, "switch: display \(uuid) WindowServer reports target Space \(observed) after \(Int(ms)) ms (posted \(flight.posted))", landed: true)
             } else if observed == flight.posted {
                 post(on: uuid)  // landed on an older request; go on to the newest
-            } else if clock() - flight.postedAt > timeout {
+            } else if timedOut {
                 // The posted swipe did not land. Waiting for it first means it can't land late, after this.
-                if observed == flight.target {
-                    finish(uuid, String(format: "switch: on Space %llu after %.0f ms", observed, ms), landed: true)
-                } else if flight.retried {
-                    finish(uuid, "switch: gave up on Space \(flight.target), display is on Space \(observed)", error: true)
+                if flight.retried {
+                    finish(uuid, "switch: gave up on Space \(flight.target), WindowServer reports Space \(observed) on display \(uuid)", error: true)
                 } else {
                     flights[uuid]!.retried = true
                     post(on: uuid)

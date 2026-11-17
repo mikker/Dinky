@@ -11,6 +11,108 @@ struct WorkspaceNumberingTests {
          PlanDisplay(uuid: "side", monitor: Monitor(name: "Side", isMain: false, count: 2), spaces: [40], current: 40)]
     }
 
+    @Test func topologyPreservesOnlyBindingsAlreadyOnSurvivingDisplays() {
+        let numbers = WorkspaceNumbering()
+        numbers.binding = initial
+        let before = displays([10, 20, 30])
+        var after = [before[0]]
+        after[0].spaces = [40, 10, 20, 30]
+        numbers.preserveSurvivingBindings(from: before, to: after)
+        #expect(numbers.preservedSpaces(on: after) == [10, 20, 30])
+        numbers.renumber(plan, on: after)
+        #expect(numbers.binding == initial)
+        // Changing only the visible Space does not discard the preservation.
+        var switched = after
+        switched[0].current = 20
+        numbers.acceptSpaceReorders(from: after, to: switched)
+        #expect(numbers.preservedSpaces(on: after) == [10, 20, 30])
+        // A genuine Mission Control reorder restores normal reorder semantics.
+        switched[0].spaces = [40, 30, 20, 10]
+        numbers.acceptSpaceReorders(from: after, to: switched)
+        #expect(numbers.preservedSpaces(on: switched).isEmpty)
+        numbers.renumber(plan, on: switched)
+        #expect(numbers.binding == [1: 40, 2: 30, 3: 20, 4: 10])
+    }
+
+    @Test func aSpaceReusedByAnotherWorkspaceDoesNotInheritPreservation() {
+        let numbers = WorkspaceNumbering()
+        numbers.binding = initial
+        numbers.preserveSurvivingBindings(from: displays(), to: displays())
+        numbers.binding = [1: 20, 2: 10, 3: 30, 4: 40]
+        #expect(numbers.preservedSpaces(on: displays()) == [30, 40])
+    }
+
+    @Test func temporarilyUnlistedSurvivingSpacesKeepTheirOldIdentities() {
+        let numbers = WorkspaceNumbering()
+        let plan = WorkspacePlan(count: 9, assignments: Dictionary(uniqueKeysWithValues: (6...9).map { ($0, [.name("built-in")]) }))
+        let original = Dictionary(uniqueKeysWithValues: (1...9).map { ($0, UInt64($0)) })
+        numbers.binding = original
+        let docked = [
+            PlanDisplay(uuid: "D", monitor: Monitor(name: "Dell", isMain: true, count: 2), spaces: [1, 2, 3, 4, 5], current: 1),
+            PlanDisplay(uuid: "L", monitor: Monitor(name: "Built-in", isMain: false, count: 2), spaces: [6, 7, 8, 9], current: 6),
+        ]
+        // First callback: display survives but WindowServer temporarily omits all four old Spaces.
+        let transient = [PlanDisplay(uuid: "L", monitor: Monitor(name: "Built-in", isMain: true, count: 1),
+                                     spaces: [1, 2, 3, 4, 5], current: 1)]
+        numbers.preserveSurvivingBindings(from: docked, to: transient)
+        #expect(numbers.preservedSpaces(on: transient).isEmpty)
+        // The existing reconciliation wait restores them before planning, without another topology change.
+        let settled = [PlanDisplay(uuid: "L", monitor: transient[0].monitor, spaces: [6, 7, 8, 9, 1, 2, 3, 4, 5], current: 6)]
+        #expect(numbers.preservedSpaces(on: settled) == [6, 7, 8, 9])
+        let step = plan.step(settled, binding: numbers.binding, occupied: [6, 8], preserving: numbers.preservedSpaces(on: settled))
+        #expect(step.binding == original)
+        #expect(step.action == nil)
+    }
+
+    @Test func capturedHomeDoesNotPreserveASpaceRestoredOnAnotherDisplay() {
+        let numbers = WorkspaceNumbering()
+        numbers.binding = initial
+        let before = displays([10, 20, 30])
+        var transient = before
+        transient[0].spaces = []
+        numbers.preserveSurvivingBindings(from: before, to: transient)
+        var settled = before
+        settled[0].spaces = [10, 30]
+        settled[1].spaces = [20, 40]
+        #expect(numbers.preservedSpaces(on: settled) == [10, 30, 40])
+        // If the old display itself subsequently disconnects, its captured provenance is retired.
+        numbers.preserveSurvivingBindings(from: transient, to: [settled[1]])
+        #expect(numbers.preservedSpaces(on: [settled[1]]) == [40])
+    }
+
+    @Test func arrangementFinalizesTopologyAndPublishesAfterDisabledNumberingToo() {
+        let numbers = WorkspaceNumbering()
+        numbers.binding = initial
+        let before = displays([10, 20, 30])
+        numbers.preserveSurvivingBindings(from: before, to: before)
+        var publications = 0
+        numbers.observe { _ in publications += 1 }
+        #expect(numbers.topologyPending)
+        numbers.withArrangement {
+            #expect(numbers.arranging)
+            #expect(numbers.topologyPending)
+            // Disabled numbering carries out no action, but it still finishes this shared scope.
+            #expect(publications == 0)
+        }
+        #expect(!numbers.arranging)
+        #expect(!numbers.topologyPending)
+        #expect(publications == 1)
+        numbers.acceptSpaceReorders(from: before, to: displays([30, 20, 10]))
+        numbers.renumber(plan, on: displays([30, 20, 10]))
+        #expect(numbers.binding == [1: 30, 2: 20, 3: 10, 4: 40])
+    }
+
+    @Test func arrangementFailureAlsoFinalizesTopology() {
+        enum Failure: Error { case interrupted }
+        let numbers = WorkspaceNumbering()
+        numbers.preserveSurvivingBindings(from: displays(), to: displays())
+        #expect(throws: Failure.interrupted) {
+            try numbers.withArrangement { throw Failure.interrupted }
+        }
+        #expect(!numbers.arranging)
+        #expect(!numbers.topologyPending)
+    }
+
     @Test func renumberRemapsBothHomeGenerationsWithoutSamplingWindows() {
         let numbers = WorkspaceNumbering()
         numbers.binding = initial
