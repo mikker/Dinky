@@ -53,6 +53,10 @@ final class WindowModel {
 
     private let ownPID = getpid()
 
+    init(windows: [Window] = []) {
+        self.windows = Dictionary(uniqueKeysWithValues: windows.map { ($0.id, $0) })
+    }
+
     /// Subscribes to the shared WindowServer stream and seeds the table. False if WindowServer refused.
     /// Call once.
     func start() -> Bool {

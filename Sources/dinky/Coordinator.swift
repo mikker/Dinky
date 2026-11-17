@@ -15,7 +15,7 @@ struct Placement {
 // display models, applied through the frame applier. Every change marks the trees it touched dirty; `flush` applies the
 // dirty trees that are on screen. Main thread only.
 final class Coordinator {
-    let model = WindowModel()
+    let model: WindowModel
     var enabled = true {
         didSet {
             applier.updateLayoutState(enabled: enabled, overview: MissionControl.shared.active)
@@ -39,8 +39,8 @@ final class Coordinator {
     func isBorderWindow(_ id: WindowID) -> Bool { borders?.isBorder(id) ?? false }
     var workspaces: [UInt64: Workspace] = [:]
     var placements: [WindowID: Placement] = [:]
-    /// AX identifiers read during classification. Cached so diagnostic queries never block on AX.
-    var windowIdentifiers: [WindowID: String] = [:]
+    var enqueueWindowRule: (Command, UInt32) -> Void = enqueueRule
+    let windowFacts: WindowFactsCache
     var layouts = PendingLayouts()
     /// Counts overlapping full writes so an older completion cannot expose a newer pass's events.
     private var applying: [UInt64: Int] = [:]
@@ -84,10 +84,14 @@ final class Coordinator {
     /// While set, `flush` leaves the trees for later. See `spacesShown`.
     private var holding = false
 
-    init(displays: DisplayModel, config: Config, applier: FrameApplier = FrameApplier()) {
+    init(displays: DisplayModel, config: Config, applier: FrameApplier = FrameApplier(),
+         windowFacts: WindowFactsCache = WindowFactsCache(), model: WindowModel = WindowModel()) {
+        self.model = model
         self.displays = displays
         self.config = config
         self.applier = applier
+        self.windowFacts = windowFacts
+        windowFacts.onChange = { [weak self] id in self?.borders?.factsChanged(id) }
     }
 
     /// `beforeTiling` runs once the model has read every window, whether or not it is subscribed to events, and
@@ -128,16 +132,24 @@ final class Coordinator {
         reconcile()
     }
 
-    func update(config: Config) {
+    /// Returns whether the caller must also arrange native Spaces. A decoration-only reload must do neither.
+    @discardableResult
+    func update(config: Config) -> Bool {
+        let updatesWindows = config.requiresWindowUpdate(comparedTo: self.config)
         self.config = config
+        if !config.borders.rules.isEmpty {
+            for window in model.windows.values where window.isDocument { windowFacts.refresh(window) }
+        }
         animator.setDuration(ms: config.animations.durationMs)
         updateBorders()
+        guard updatesWindows else { return false }
         configureWorkspaces()
         // A workspace switched to/from floating must release/acquire its existing windows too.
         for window in model.windows.values { track(window) }
         fitToDisplays()
         layouts.dirty.formUnion(workspaces.keys)
         flush()
+        return true
     }
 
     /// Borders are drawn while dinky is enabled and the config has them on. Otherwise their windows are released,
@@ -145,7 +157,8 @@ final class Coordinator {
     private func updateBorders() {
         if enabled, config.borders.enabled {
             borders = borders ?? BorderManager(config: config.borders, model: model, displays: displays.displays,
-                                               isAnimating: { [unowned self] id in animator.isAnimating(id) })
+                                               isAnimating: { [unowned self] id in animator.isAnimating(id) },
+                                               decorates: { [windowFacts] window, config in windowFacts.decorates(window, config: config) })
             borders?.update(config: config.borders)
         } else {
             borders = nil
@@ -164,6 +177,10 @@ final class Coordinator {
         if let window = event.window {
             let departure = focusRepair(by: window, removed: event.change == .removed)
             event.change == .removed ? forget(window.id) : track(window)
+            if event.change != .removed, window.isDocument, !config.borders.rules.isEmpty,
+               [.windowCreate, .windowTitle, .windowUpdate].contains(event.kind) {
+                windowFacts.refresh(window)
+            }
             if let departure { scheduleRefocus(departure) }
             if [.windowMove, .windowResize].contains(event.kind) {
                 noteFrameChange(of: window.id)
@@ -389,7 +406,7 @@ final class Coordinator {
     }
 
     func forget(_ id: WindowID) {
-        windowIdentifiers[id] = nil
+        windowFacts.forget(id)
         settlements[id] = nil
         adoptTargets[id] = nil
         adopting.remove(id)

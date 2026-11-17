@@ -70,6 +70,13 @@ extension Config {
     order = 'below'                 # below | above (a click-through ring over the window)
     exclude-apps = []               # bundle IDs whose windows get no border
 
+    # Optional per-window decoration; independent of [[rules]] placement commands.
+    # Last match wins; [borders].enabled = false and exclude-apps always veto.
+    # [[borders.rules]]
+    # app-id = 'com.example.editor'
+    # window-identifier = '^DocumentSettingsWindow$' # AXIdentifier, not a numeric window ID
+    # enabled = false
+
     [focus-follows-mouse]
     enabled = false
     delay-ms = 100                  # how long the pointer rests on a window before it takes focus

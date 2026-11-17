@@ -20,7 +20,7 @@ extension Coordinator {
             return awaitClassification(window.id, unsettled: true) ? nil : (true, false)
         }
         let subrole = axString(element, kAXSubroleAttribute)
-        let kind = windowKind(subrole: subrole)
+        let kind = windowKind(subrole: subrole) ?? .panel
         var resizable: DarwinBoolean = false
         AXUIElementIsAttributeSettable(element, kAXSizeAttribute as CFString, &resizable)
         let title = axString(element, kAXTitleAttribute) ?? ""
@@ -68,10 +68,11 @@ extension Coordinator {
     /// placed before its workspace commands run. The fullscreen heuristic stays lazy and cannot override rules.
     func classify(_ window: Window, kind: WindowKind, resizable: Bool, title: String, identifier: String?,
                   lacksFullscreen: @autoclosure () -> Bool,
-                  enqueue: (Command, UInt32) -> Void = enqueueRule) -> (floating: Bool, runsRules: Bool) {
-        windowIdentifiers[window.id] = identifier
+                  enqueue: ((Command, UInt32) -> Void)? = nil) -> (floating: Bool, runsRules: Bool) {
+        windowFacts.record(window, facts: WindowFacts(title: title, kind: kind, identifier: identifier))
         // `layout floating` and `layout tiling` decide here, the last one wins. Other rule commands, such as
         // move-window-to-workspace, run for this window once it is placed.
+        let enqueue = enqueue ?? enqueueWindowRule
         var floats: Bool?
         var runsRules = false
         for command in config.commands(for: window, kind: kind, title: title, identifier: identifier) {
@@ -89,7 +90,7 @@ extension Coordinator {
     }
 }
 
-private func enqueueRule(_ command: Command, _ window: UInt32) {
+func enqueueRule(_ command: Command, _ window: UInt32) {
     DispatchQueue.main.async {
         let reply = Dispatcher.run(command, window: window)
         if !reply.ok { fputs("rule: \(reply.text)\n", stderr) }
@@ -128,23 +129,7 @@ private func buttonEnabled(_ element: AXUIElement, _ attribute: String) -> Bool 
 extension Config {
     /// The commands of every rule that matches, in order. Commands that do not parse are skipped.
     func commands(for window: Window, kind: WindowKind, title: String, identifier: String?) -> [Command] {
-        rules.filter { $0.matches(appId: window.bundleID, appName: window.appName, title: title, kind: kind, windowIdentifier: identifier) }
+        rules.filter { $0.match.matches(appId: window.bundleID, appName: window.appName, title: title, kind: kind, windowIdentifier: identifier) }
             .flatMap { $0.run.compactMap { try? Command.parse($0) } }
     }
-}
-
-/// The rule kind for an AX subrole. Anything that is not a standard window, dialog or sheet is a panel.
-private func windowKind(subrole: String?) -> WindowKind {
-    switch subrole {
-    case kAXStandardWindowSubrole: .normal
-    case kAXDialogSubrole, kAXSystemDialogSubrole: .dialog
-    case "AXSheet": .sheet
-    default: .panel
-    }
-}
-
-private func axString(_ element: AXUIElement, _ attribute: String) -> String? {
-    var value: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
-    return value as? String
 }

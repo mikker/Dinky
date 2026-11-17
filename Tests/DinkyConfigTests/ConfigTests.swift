@@ -22,7 +22,7 @@ struct ConfigTests {
         #expect(config.borders.activeColor == Color(red: 0xE1 / 255, green: 0xE3 / 255, blue: 0xE4 / 255))
         #expect(config.hooks == Hooks())
         #expect(config.rules.count == 1)
-        #expect(config.rules[0].appId == "com.apple.systempreferences")
+        #expect(config.rules[0].match.appId == "com.apple.systempreferences")
         #expect(config.rules[0].run == ["layout floating"])
         #expect(Set(config.modes.keys) == ["main", "service"])
         let main = config.modes["main"]!.bindings
@@ -416,20 +416,20 @@ struct ConfigTests {
         run = 'layout tiling'
         """)
         var expected = WindowRule()
-        expected.appId = "com.apple.finder"
-        expected.appName = "find"
-        expected.title = "^Copy"
-        expected.kind = .dialog
+        expected.match.appId = "com.apple.finder"
+        expected.match.appName = "find"
+        expected.match.title = "^Copy"
+        expected.match.kind = .dialog
         expected.run = ["layout floating", "move-window-to-workspace 2"]
         var second = WindowRule()
         second.run = ["layout tiling"]
         #expect(config.rules == [expected, second])
 
-        #expect(expected.matches(appId: "com.apple.finder", appName: "Finder", title: "Copy 3 items", kind: .dialog))
-        #expect(!expected.matches(appId: "com.apple.finder", appName: "Finder", title: "Copy 3 items", kind: .normal))
-        #expect(!expected.matches(appId: "com.apple.finder", appName: "Finder", title: "Desktop", kind: .dialog))
-        #expect(!expected.matches(appId: "com.apple.Safari", appName: "Finder", title: "Copy", kind: .dialog))
-        #expect(second.matches(appId: nil, appName: nil, title: "", kind: .normal), "a rule with no conditions matches everything")
+        #expect(expected.match.matches(appId: "com.apple.finder", appName: "Finder", title: "Copy 3 items", kind: .dialog))
+        #expect(!expected.match.matches(appId: "com.apple.finder", appName: "Finder", title: "Copy 3 items", kind: .normal))
+        #expect(!expected.match.matches(appId: "com.apple.finder", appName: "Finder", title: "Desktop", kind: .dialog))
+        #expect(!expected.match.matches(appId: "com.apple.Safari", appName: "Finder", title: "Copy", kind: .dialog))
+        #expect(second.match.matches(appId: nil, appName: nil, title: "", kind: .normal), "a rule with no conditions matches everything")
     }
 
     @Test func `Window rule matches the bundle ID by regex`() throws {
@@ -444,17 +444,17 @@ struct ConfigTests {
         run = 'layout floating'
         """)
         var expected = WindowRule()
-        expected.appIdRegex = "^co\\.ensili\\."
+        expected.match.appIdRegex = "^co\\.ensili\\."
         expected.run = ["layout floating"]
         #expect(config.rules.first == expected)
 
         let prefix = config.rules[0], both = config.rules[1]
-        #expect(prefix.matches(appId: "co.ensili.Scrivener", appName: "Scrivener", title: "", kind: .normal))
-        #expect(prefix.matches(appId: "CO.Ensili.Other", appName: nil, title: "", kind: .normal), "case-insensitive")
-        #expect(!prefix.matches(appId: "uk.co.ensili.x", appName: nil, title: "", kind: .normal), "anchored by the pattern")
-        #expect(!prefix.matches(appId: nil, appName: "Scrivener", title: "", kind: .normal), "no bundle ID never matches")
-        #expect(both.matches(appId: "co.ensili.Scrivener", appName: nil, title: "", kind: .normal))
-        #expect(!both.matches(appId: "co.ensili.scrivener", appName: nil, title: "", kind: .normal), "app-id stays exact")
+        #expect(prefix.match.matches(appId: "co.ensili.Scrivener", appName: "Scrivener", title: "", kind: .normal))
+        #expect(prefix.match.matches(appId: "CO.Ensili.Other", appName: nil, title: "", kind: .normal), "case-insensitive")
+        #expect(!prefix.match.matches(appId: "uk.co.ensili.x", appName: nil, title: "", kind: .normal), "anchored by the pattern")
+        #expect(!prefix.match.matches(appId: nil, appName: "Scrivener", title: "", kind: .normal), "no bundle ID never matches")
+        #expect(both.match.matches(appId: "co.ensili.Scrivener", appName: nil, title: "", kind: .normal))
+        #expect(!both.match.matches(appId: "co.ensili.scrivener", appName: nil, title: "", kind: .normal), "app-id stays exact")
     }
 
     @Test func `Bad window rules fail`() {

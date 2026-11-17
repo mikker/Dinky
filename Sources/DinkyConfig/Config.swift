@@ -76,6 +76,14 @@ public struct Config: Equatable {
         return try parse(toml)
     }
 
+    /// Only changed border settings bypass window updates; an unchanged reload still retries arrangement.
+    public func requiresWindowUpdate(comparedTo previous: Config) -> Bool {
+        guard borders != previous.borders else { return true }
+        var nonDecoration = self
+        nonDecoration.borders = previous.borders
+        return nonDecoration != previous
+    }
+
     public static func parse(_ toml: String) throws(ConfigError) -> Config {
         let root: TOMLTable
         do {
@@ -333,6 +341,7 @@ public struct Borders: Equatable {
     public var order = BorderOrder.below
     /// Bundle IDs whose windows get no border.
     public var excludeApps: [String] = []
+    public var rules: [BorderRule] = []
 
     public init() {}
 
@@ -343,7 +352,15 @@ public struct Borders: Equatable {
         inactiveColor = try t.color("inactive-color") ?? inactiveColor
         order = try t.choice("order") ?? order
         excludeApps = try t.strings("exclude-apps") ?? excludeApps
+        rules = try t.tables("rules")?.map(BorderRule.init) ?? []
         try t.done()
+    }
+
+    /// Global disable and app exclusions veto even an explicit per-window enable.
+    public func decorates(bundleID: String?, appName: String?, title: String, kind: WindowKind?, identifier: String?) -> Bool {
+        guard enabled, decorates(bundleID: bundleID) else { return false }
+        return rules.last { $0.match.matches(appId: bundleID, appName: appName, title: title, kind: kind,
+                                             windowIdentifier: identifier) }?.enabled ?? true
     }
 
     /// Whether windows of the app with this bundle ID get a border.

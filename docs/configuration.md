@@ -331,9 +331,49 @@ fullscreen-width = 0.55
 | `active-color` | `'#e1e3e4'` | `'#rrggbb'` or `'#rrggbbaa'`. |
 | `inactive-color` | `'#494d64'` | |
 | `order` | `'below'` | `'above'` draws a click-through ring over the window. |
-| `exclude-apps` | `[]` | Bundle IDs that get no border. |
+| `exclude-apps` | `[]` | Bundle IDs that get no border, even if a window rule enables one. |
+| `rules` | `[]` | Per-window decoration rules, below. |
 
 </div>
+
+### `[[borders.rules]]`
+
+Use the same [selectors as window rules](#rules): `app-id`, `app-id-regex`,
+`app-name`, `title`, `kind`, `window-identifier`, and `exclude-window-identifier`.
+Each border rule requires `enabled = true` or `enabled = false`, **not** `run`.
+All supplied selectors must match; the **last matching rule wins**. With no match,
+document windows keep their borders. Global `[borders].enabled = false` and
+`exclude-apps` always veto per-window enabling. Rules cannot add borders to
+non-document windows or otherwise change the usual visibility/Space checks.
+
+```toml
+[[borders.rules]]
+app-id = 'com.example.editor'
+window-identifier = '^DocumentSettingsWindow$'
+enabled = false
+```
+
+This hides just the auxiliary window's border and keeps document borders, whether
+either window floats or tiles. `window-identifier` is the Accessibility
+**AXIdentifier**, not the numeric WindowServer ID. Discover it with
+`dinky list-windows --all --format '%{app-name} | %{window-identifier}'`.
+Regexes are case-insensitive searches; use anchors for an exact match. A missing
+identifier never matches a positive selector and never triggers an exclusion.
+
+Reloading border settings updates **existing** windows without moving/resizing
+them, replaying `[[rules]]` commands, or rearranging Spaces. This guarantee is for
+border-only changes; changing layout/workspace settings in the same reload still
+applies those settings. Reloading an unchanged config still retries workspace
+arrangement and reapplies layout, as before. Placement rules remain one-shot
+rules for new windows.
+Decoration facts are cached at classification and refreshed for border rules on
+reload, window creation/title changes and settled window updates, not each animation
+frame. Incomplete opening AX facts get a bounded one-second retry; unsupported
+identifiers remain missing. Unreachable windows (such as on a hidden Space) keep
+their last snapshot until a later refresh succeeds. Unknown kind/identifier facts
+never match their positive selectors; an unreadable title is treated as empty,
+as in placement rules. App-only selectors work even
+when AX is unavailable.
 
 ## `[focus-follows-mouse]`
 
@@ -536,9 +576,9 @@ dinky list-windows --all --format '%{app-name} | %{window-id} | %{window-identif
 ```
 
 `debug-state` also includes `window-identifier` for each window. These values
-are cached from classification to avoid extra Accessibility queries during
-diagnostics. The list variable is empty, and the JSON field is `null`, when the
-identifier is unavailable or the window has not yet been classified. Some apps
+are cached from classification and decoration refreshes to avoid extra
+Accessibility queries during diagnostics. The list variable is empty, and the
+JSON field is `null`, when the identifier is unavailable or the window has not yet supplied AX facts. Some apps
 do not expose identifiers. Dialogs, panels and fixed-size windows retain their
 usual floating behavior.
 

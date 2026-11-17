@@ -125,6 +125,16 @@ struct SchemaTests {
         order = 'above'
         exclude-apps = ['com.apple.finder']
 
+        [[borders.rules]]
+        app-id = 'com.example.editor'
+        app-id-regex = '^com\\.example'
+        app-name = 'Editor'
+        title = 'Settings'
+        kind = 'normal'
+        window-identifier = '^Settings$'
+        exclude-window-identifier = '^Document$'
+        enabled = false
+
         [focus-follows-mouse]
         enabled = true
         delay-ms = 50

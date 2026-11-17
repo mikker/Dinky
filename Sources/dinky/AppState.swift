@@ -112,8 +112,7 @@ final class AppState {
             hotkeys.load(modes: config.modes, sides: config.modifiers)
             // At launch the app arranges the workspaces itself, once the coordinator has started.
             if let coordinator {
-                coordinator.update(config: config)
-                numbers.arrange()
+                if coordinator.update(config: config) { numbers.arrange() }
                 hoverFocus.update(config: config.focusFollowsMouse)
             }
             applyStartAtLogin(config.startAtLogin)
