@@ -49,7 +49,7 @@ extension Coordinator {
                 let live = dinky_window_info(w.id)
                 return [
                     "id": w.id, "pid": w.pid, "app": w.appName ?? "", "bundle-id": w.bundleID ?? "",
-                    "window-identifier": windowIdentifiers[w.id].map { $0 as Any } ?? NSNull(),
+                    "window-identifier": windowFacts.facts(for: w)?.identifier.map { $0 as Any } ?? NSNull(),
                     "frame": debugFrame(w.frame), "space": w.spaceID, "normal": w.isNormal, "minimized": w.isMinimized,
                     "hidden": isHidden(w.pid),
                     "live-frame": live.exists ? debugFrame(live.frame) : [], "live-space": dinky_window_space_id(w.id),

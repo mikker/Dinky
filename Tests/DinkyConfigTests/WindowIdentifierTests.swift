@@ -3,7 +3,7 @@ import Testing
 
 struct WindowIdentifierTests {
     private func matches(_ rule: WindowRule, _ identifier: String?) -> Bool {
-        rule.matches(appId: "com.example.editor", appName: "Editor", title: "Untitled", kind: .normal,
+        rule.match.matches(appId: "com.example.editor", appName: "Editor", title: "Untitled", kind: .normal,
                      windowIdentifier: identifier)
     }
 
@@ -14,17 +14,17 @@ struct WindowIdentifierTests {
         exclude-window-identifier = 'Inspector'
         run = 'layout floating'
         """).rules[0]
-        #expect(rule.windowIdentifier == "^Settings$")
-        #expect(rule.excludeWindowIdentifier == "Inspector")
+        #expect(rule.match.windowIdentifier == "^Settings$")
+        #expect(rule.match.excludeWindowIdentifier == "Inspector")
     }
 
     @Test func positiveMatchUsesAnchorsAndCaseInsensitiveRegex() {
         var rule = WindowRule()
-        rule.windowIdentifier = "^DocumentSettingsWindow$"
+        rule.match.windowIdentifier = "^DocumentSettingsWindow$"
         #expect(matches(rule, "documentsettingswindow"))
         #expect(!matches(rule, "OtherDocumentSettingsWindow"))
         #expect(!matches(rule, nil))
-        rule.windowIdentifier = "Settings"
+        rule.match.windowIdentifier = "Settings"
         #expect(matches(rule, "DocumentSettingsWindow"))
     }
 
@@ -36,7 +36,7 @@ struct WindowIdentifierTests {
 
     @Test func exclusionRejectsOnlyMatchingIdentifiers() {
         var rule = WindowRule()
-        rule.excludeWindowIdentifier = "^Settings$"
+        rule.match.excludeWindowIdentifier = "^Settings$"
         #expect(!matches(rule, "SETTINGS"))
         #expect(matches(rule, "Document"))
         #expect(matches(rule, nil))
@@ -45,17 +45,17 @@ struct WindowIdentifierTests {
 
     @Test func allConditionsStillHaveToMatch() {
         var rule = WindowRule()
-        rule.appId = "com.other.editor"
-        rule.windowIdentifier = "Settings"
+        rule.match.appId = "com.other.editor"
+        rule.match.windowIdentifier = "Settings"
         #expect(!matches(rule, "Settings"))
-        rule.appId = "com.example.editor"
-        rule.kind = .dialog
+        rule.match.appId = "com.example.editor"
+        rule.match.kind = .dialog
         #expect(!matches(rule, "Settings"))
-        rule.kind = .normal
-        rule.title = "Other"
+        rule.match.kind = .normal
+        rule.match.title = "Other"
         #expect(!matches(rule, "Settings"))
-        rule.title = "Untitled"
-        rule.excludeWindowIdentifier = "Settings"
+        rule.match.title = "Untitled"
+        rule.match.excludeWindowIdentifier = "Settings"
         #expect(!matches(rule, "Settings"))
     }
 

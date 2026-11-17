@@ -32,6 +32,8 @@ windows from documents with the same title. See [window rules](https://dinky.rod
 Window borders use a subtle 5% optical thickening at rounded corner midpoints,
 tapering back to the configured width at the straight edges.
 
+Per-window [`[[borders.rules]]`](docs/configuration.md#bordersrules) can hide auxiliary-window borders independently of floating/tiling, including by Accessibility `AXIdentifier`. Border-only reloads update existing windows without changing their placement.
+
 See [border development](docs/border-development.md) for the native comparison preview and regression tests.
 
 MIT licensed.

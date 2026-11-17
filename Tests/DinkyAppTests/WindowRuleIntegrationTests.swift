@@ -36,7 +36,7 @@ struct WindowRuleIntegrationTests {
         #expect(result.floating)
         #expect(!result.runsRules)
         #expect(queued.isEmpty) // Neither workspace move nor exec; not just the layout command.
-        #expect(owner.windowIdentifiers[window.id] == "sEtTiNgS")
+        #expect(owner.windowFacts.facts(for: window)?.identifier == "sEtTiNgS")
     }
 
     @Test func documentQueuesCommandsInOrderForTheClassifiedWindow() throws {
@@ -53,7 +53,7 @@ struct WindowRuleIntegrationTests {
         #expect(queued == [try Command.parse("move-window-to-workspace 4 --follow"),
                            try Command.parse("exec-and-forget echo document")])
         #expect(targets == [window.id, window.id])
-        #expect(owner.windowIdentifiers[window.id] == "Document")
+        #expect(owner.windowFacts.facts(for: window)?.identifier == "Document")
     }
 
     @Test(arguments: [nil, "Unknown"] as [String?])
@@ -72,7 +72,7 @@ struct WindowRuleIntegrationTests {
         #expect(result.runsRules)
         #expect(queued == [try Command.parse("move-window-to-workspace 4 --follow"),
                            try Command.parse("exec-and-forget echo document")])
-        #expect(owner.windowIdentifiers[window.id] == identifier)
+        #expect(owner.windowFacts.facts(for: window)?.identifier == identifier)
     }
 
     @Test(arguments: [WindowKind.dialog, .sheet, .panel])
@@ -111,11 +111,11 @@ struct WindowRuleIntegrationTests {
         _ = owner.classify(window, kind: .normal, resizable: true, title: "Untitled",
                            identifier: "Settings", lacksFullscreen: false) { _, _ in }
         #expect(owner.placements[window.id] == nil)
-        #expect(owner.windowIdentifiers[window.id] == "Settings")
+        #expect(owner.windowFacts.facts(for: window)?.identifier == "Settings")
         owner.forget(window.id)
-        #expect(owner.windowIdentifiers[window.id] == nil)
+        #expect(owner.windowFacts.facts(for: window)?.identifier == nil)
         owner.forget(window.id) // Forgetting an already-forgotten window is harmless.
-        #expect(owner.windowIdentifiers.isEmpty)
+        #expect(owner.windowFacts.facts(for: window) == nil)
     }
 
     @Test func missingIdentifierClearsPreviouslyCachedValue() throws {
@@ -123,7 +123,7 @@ struct WindowRuleIntegrationTests {
         for identifier in ["Settings", nil] as [String?] {
             _ = owner.classify(window, kind: .normal, resizable: true, title: "Untitled",
                                identifier: identifier, lacksFullscreen: false) { _, _ in }
-            #expect(owner.windowIdentifiers[window.id] == identifier)
+            #expect(owner.windowFacts.facts(for: window)?.identifier == identifier)
         }
     }
 
@@ -152,6 +152,6 @@ struct WindowRuleIntegrationTests {
         owner.track(window)
         #expect(owner.placements[window.id]?.floating == true)
         #expect(owner.settlements.isEmpty)
-        #expect(owner.windowIdentifiers.isEmpty)
+        #expect(owner.windowFacts.facts(for: window) == nil)
     }
 }

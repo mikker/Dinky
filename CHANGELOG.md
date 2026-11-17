@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Configuration
+
+- Control individual window borders with `[[borders.rules]]`, using the same selectors as placement rules (including Accessibility identifiers). Border-only reloads update existing windows without moving/resizing them or replaying commands; floating/tiling and app-wide exclusions remain independent (#78, requested by Alberto Malossi @albertomalossi).
+
 ### Fixes
 
 - Keep workspace Spaces already on a surviving display when docking or undocking; only remove a visible leftover Space after confirming a switch away. Timestamp display changes and log before/after Space snapshots for diagnosis (#80, thanks Tim Tilberg @ttilberg).
