@@ -4,14 +4,14 @@
 
 ### Configuration
 
-- Control individual window borders with `[[borders.rules]]`, using the same selectors as placement rules (including Accessibility identifiers). Border-only reloads update existing windows without moving/resizing them or replaying commands; floating/tiling and app-wide exclusions remain independent (#78, requested by Alberto Malossi @albertomalossi).
+- Hide borders on individual windows with `[[borders.rules]]`, including by Accessibility identifier. Border-only reloads update open windows without moving or resizing them, whether floating or tiled (#78, requested by Alberto Malossi @albertomalossi).
 
 ### Fixes
 
-- Keep workspace Spaces already on a surviving display when docking or undocking; only remove a visible leftover Space after confirming a switch away. Timestamp display changes and log before/after Space snapshots for diagnosis (#80, thanks Tim Tilberg @ttilberg).
-- A window an app hides without minimizing gives up its tile, instead of holding an invisible tile until dinky restarts or retiles (#79, thanks @sndrgrdn).
-- Rounded window borders get a subtle 5% optical thickening at the corner midpoints, leaving straight edges, inner outlines and square corners unchanged (#77, thanks @albertomalossi).
-- `dinky doctor` points to System Settings to turn off slow Cmd-Tab Space switching, instead of onboarding's one-time step (#76, thanks @ChrisGVE).
+- Docking and undocking keep workspace Spaces that survive on their display. A visible Space is removed only after a switch away is confirmed; display logs now include timestamps and before/after Space snapshots (#80, thanks Tim Tilberg @ttilberg).
+- Windows an app hides without minimizing no longer leave empty tiles (#79, thanks @sndrgrdn).
+- Rounded window borders look more even around the corners (#77, thanks @albertomalossi).
+- `dinky doctor` points to System Settings to turn off slow Cmd-Tab Space switching, instead of the one-time onboarding step (#76, thanks @ChrisGVE).
 
 ## 0.28
 

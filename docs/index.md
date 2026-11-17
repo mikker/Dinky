@@ -120,8 +120,9 @@ defaults write com.apple.dock workspaces-auto-swoosh -bool true && killall Dock
 
 ## Known limits
 
-- Only one display has been tested properly. Switching a display the pointer
-  is not on may flicker the pointer.
+- Multi-display docking is tested with virtual displays; physical docking
+  coverage is limited. Switching a display the pointer is not on may flicker
+  the pointer.
 - dinky creates and removes Spaces to keep one per workspace, but leaves a
   leftover Space with windows alone.
 - Apps refuse some sizes (Safari's minimum width, Terminal's grid). dinky lays

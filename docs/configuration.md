@@ -285,10 +285,11 @@ when macOS merges the departing display's Spaces after or between them. This can
 leave workspace numbers out of Mission Control order. That preservation survives
 config reloads. Dinky captures the old workspace/Space/display identities before
 waiting for the new snapshot to settle. Chained callbacks share that original
-ownership snapshot rather than recapturing temporary hosts. Temporarily unlisted Spaces can still
-be preserved when they reappear on their old display. Changing a workspace's
-display assignment still moves it. A later
-reorder of the display's existing Spaces restores the usual numeric-order policy
+ownership snapshot rather than recapturing temporary hosts. Temporarily unlisted
+Spaces can still be preserved when they reappear on their old display. If macOS
+removes a Space itself, dinky creates or reuses a replacement for that workspace.
+Changing a workspace's display assignment still moves it. A later reorder of the
+display's existing Spaces restores the usual numeric-order policy
 (or renumbers them with `follow-space-order`). A visible leftover Space is removed
 only after WindowServer confirms a switch to another numbered Space; an unknown
 current Space, failed switch or timeout leaves it alone. While disabled, dinky
