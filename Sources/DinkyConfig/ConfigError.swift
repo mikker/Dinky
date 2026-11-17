@@ -64,8 +64,8 @@ func lineNumber(of path: String, in toml: String) -> Int? {
     let target = keyParts(path.replacingOccurrences(of: #"\[\d+\]"#, with: "", options: .regularExpression))
     var header: [String] = []
     var best: (line: Int, length: Int)?
-    for (index, rawLine) in toml.components(separatedBy: .newlines).enumerated() {
-        let line = rawLine.trimmingCharacters(in: .whitespaces)
+    for (index, rawLine) in configLines(toml).enumerated() {
+        let line = rawLine.content.trimmingCharacters(in: .whitespaces)
         let full: [String]
         if line.hasPrefix("[") {
             header = keyParts(line.trimmingCharacters(in: CharacterSet(charactersIn: "[] ")))
