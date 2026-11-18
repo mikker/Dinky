@@ -8,14 +8,20 @@ extension Layout {
     /// Each raise briefly puts that window on top, and makes it its app's key window, before the ones meant to
     /// be in front of it are raised again: a visible flash. So raising is kept to the fewest windows from the
     /// front, only the order of two windows whose overlap shows somewhere counts (where windows above both
-    /// cover it, either may be on top), and once the front window is on top nothing is raised just to fix
-    /// which background window peeks out at an edge. A focus change puts the new front window on top, so
-    /// switching windows in an accordion normally raises nothing.
+    /// cover it, either may be on top). Once every foreground window is above its overlapping neighbours,
+    /// nothing is raised just to fix which background window peeks out at an edge. Disjoint tiles can each be
+    /// foreground; in an accordion only its front window is. Switching accordion focus normally raises nothing.
     public func raises(current: [WindowID]) -> [WindowID] {
         let stack = order.filter { id in
-            frames.contains { other, rect in other != id && !rect.intersection(frames[id]!).isEmpty }
+            frames.keys.contains { $0 != id && overlaps($0, id) }
         }
-        if let front = stack.first, current.first(where: stack.contains) == front { return [] }
+        // A window is foreground only if no earlier window in the desired order overlaps it.
+        let foreground = stack.indices.filter { i in
+            !stack[..<i].contains { overlaps($0, stack[i]) }
+        }
+        if foreground.allSatisfy({ i in
+            current.first { stack.contains($0) && overlaps($0, stack[i]) } == stack[i]
+        }) { return [] }
         let position = Dictionary(current.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
         // Raising the first `n` of the stack, back to front, puts them on top in order; the rest keep their
         // current order, which must already be right. With n = stack.count there is no rest, so one n fits.
@@ -30,6 +36,10 @@ extension Layout {
             }
         }!
         return Array(stack.prefix(n).reversed())
+    }
+
+    private func overlaps(_ a: WindowID, _ b: WindowID) -> Bool {
+        !frames[a]!.intersection(frames[b]!).isEmpty
     }
 
     /// Whether it shows which of `stack[i]` and `stack[j]` (i < j) is on top: part of their overlap is not

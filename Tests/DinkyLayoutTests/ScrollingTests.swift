@@ -130,6 +130,56 @@ struct ScrollingGeometryTests {
     }
 }
 
+struct ScrollingStackingTests {
+    /// The joined column and right-hand display from #84. The focused first column does not overlap anything;
+    /// both halves of the next column must stay above the two columns parked against the right edge.
+    private func joinedColumnLayout() -> Layout {
+        var ws = Workspace(bounds: rect(64, 30, 2944, 1662), gaps: Gaps(all: 24), algorithm: .scrolling)
+        ws.columnWidth = 0.49
+        ws.walls = [.right]
+        ws.insert(94)
+        ws.insert(6063)
+        ws.insert(6172)
+        ws.join(.left)
+        ws.insert(6286)
+        ws.insert(5161)
+        ws.focus(94)
+        return ws.layout()
+    }
+
+    @Test func `Both windows in a joined column rise above parked columns`() {
+        let layout = joinedColumnLayout()
+        #expect(layout.order == [94, 6172, 6063, 6286, 5161])
+        #expect(layout.frames[6063] == rect(1513, 54, 1389, 795))
+        #expect(layout.frames[6172] == rect(1513, 873, 1389, 795))
+        #expect(layout.raises(current: [6286, 6172, 5161, 94, 6063]) == [6063, 6172])
+    }
+
+    @Test(arguments: [WindowID(6063), 6172])
+    func `One raised half does not leave the other behind parked columns`(raised: WindowID) {
+        let layout = joinedColumnLayout()
+        let covered: WindowID = raised == 6063 ? 6172 : 6063
+        var current: [WindowID] = [94, raised, 6286, 5161, covered]
+        let raises = layout.raises(current: current)
+        #expect(raises.contains(covered))
+        for id in raises {
+            current.removeAll { $0 == id }
+            current.insert(id, at: 0)
+        }
+        for visible: WindowID in [6063, 6172] {
+            for parked: WindowID in [6286, 5161] {
+                #expect(current.firstIndex(of: visible)! < current.firstIndex(of: parked)!)
+            }
+        }
+        #expect(layout.raises(current: current).isEmpty, "a repaired stack needs no more raises")
+    }
+
+    @Test func `Correct joined columns do not raise just to reorder parked windows`() {
+        let layout = joinedColumnLayout()
+        #expect(layout.raises(current: [94, 6063, 6172, 5161, 6286]).isEmpty)
+    }
+}
+
 struct ScrollingCommandTests {
     @Test func `Move swaps a lone window's column with its neighbour, width and all`() {
         var ws = strip(3)
