@@ -59,10 +59,10 @@ struct ConfigTests {
     }
 
     @Test func `Warnings record nested paths and source lines`() throws {
-        let config = try Config.parse("[gaps]\ninner = 3\n") { table in
-            try table.table("gaps")?.warn("inner", "use the new key")
-        }
-        #expect(config.warnings == [ConfigWarning(path: "gaps.inner", "use the new key", line: 2)])
+        let config = try Config.parse("[display.main.gaps]\ninner = -3\n")
+        #expect(config.warnings == [ConfigWarning(path: "display.main.gaps.inner",
+                                                "should be 0 or more; still read as -3", line: 2,
+                                                fix: ConfigFix(replace: "-3", with: "0"))])
     }
 
     @Test func `Renamed keys keep loading`() throws {
@@ -84,6 +84,22 @@ struct ConfigTests {
         )])
     }
 
+    @Test func `Invalid renamed choices report the key as written`() {
+        assertError("[master]\norientation = 'sideways'\n", path: "master.orientation", line: 2,
+                    contains: "'left', 'right', 'center'")
+        assertError("[master] # the big window\r\norientation = 'sideways'\r\n", path: "master.orientation", line: 2,
+                    contains: "'left', 'right', 'center'")
+    }
+
+    @Test(arguments: ["orientation = 'sideways'\nside = 'right'", "side = 'right'\norientation = 'sideways'"])
+    func `The current key wins even when the ignored old value is invalid`(keys: String) throws {
+        let config = try Config.parse("[master]\n\(keys)\n")
+        #expect(config.master.side == .right)
+        #expect(config.warnings.count == 1)
+        #expect(config.warnings.first?.path == "master.orientation")
+        #expect(config.warnings.first?.message.hasPrefix("ignored:") == true)
+    }
+
     @Test func `Warnings and errors count a CRLF line break as one line`() throws {
         let config = try Config.parse("[master]\r\norientation = 'left'\r\n")
         #expect(config.warnings.map(\.line) == [2])
@@ -98,54 +114,18 @@ struct ConfigTests {
         assertError("[gaps]\ninner = 4\n[ master ] # ]\nsize = 0.95\n", path: "master.size", line: 4, contains: "0.1 to 0.9")
     }
 
-    @Test func `Config lines break on CRLF, LF and CR only and join back to the text`() {
-        let text = "a\r\nb\nc\rd\u{0C}e\u{2028}f"
-        let lines = configLines(text)
-        #expect(lines == [
-            ConfigLine(content: "a", ending: "\r\n"),
-            ConfigLine(content: "b", ending: "\n"),
-            ConfigLine(content: "c", ending: "\r"),
-            ConfigLine(content: "d\u{0C}e\u{2028}f", ending: "")
-        ])
-        #expect(lines.map { $0.content + $0.ending }.joined() == text)
-        #expect(configLines("x\n\n") == [ConfigLine(content: "x", ending: "\n"), ConfigLine(content: "", ending: "\n")])
-        #expect(configLines("").isEmpty)
+    @Test func `Config lines break on CRLF, LF and CR only`() {
+        #expect(configLines("a\r\nb\nc\rd\u{0C}e\u{2028}f") == ["a", "b", "c", "d\u{0C}e\u{2028}f"])
+        #expect(configLines("x\n\n") == ["x", "", ""])
+        #expect(configLines("") == [""])
     }
 
-    @Test func `Custom key changes cover removed keys, array tables and values`() throws {
-        let changes = KeyChanges(
-            keys: [
-                KeyChange(table: "", old: "obsolete", new: nil, version: "1.2"),
-                KeyChange(table: "rules", old: "application", new: "app-id", version: "1.3")
-            ],
-            values: [ValueChange(table: "master", key: "side", old: "west", new: "left", version: "1.4")]
-        )
-        let config = try Config.parse("""
-        obsolete = true
-        [master]
-        side = 'west'
-        [[rules]]
-        application = 'com.example.App'
-        run = 'layout floating'
-        """, changes: changes) { _ in }
-
-        #expect(config.rules[0].match.appId == "com.example.App")
-        #expect(config.master.side == .left)
-        #expect(config.warnings == [
-            ConfigWarning(path: "master.side", "'west' was renamed to 'left' in 1.4", line: 3,
-                          fix: ConfigFix(replace: "west", with: "left")),
-            ConfigWarning(path: "rules[0].application", "renamed to 'app-id' in 1.3; the old name still works",
-                          line: 5, fix: ConfigFix(replace: "application", with: "app-id")),
-            ConfigWarning(path: "obsolete", "removed in 1.2; ignored", line: 1)
-        ])
-    }
-
-    @Test func `Warnings and errors format suggestions`() {
+    @Test func `Warnings format suggestions and errors retain their location`() {
         let fix = ConfigFix(replace: "old-key", with: "new-key")
         #expect(ConfigWarning(path: "gaps.inner", "use the new key", line: 2, fix: fix).description ==
                 "line 2, gaps.inner: use the new key (suggestion: replace 'old-key' with 'new-key')")
-        #expect(ConfigError(path: "gaps.inner", "use the new key", line: 2, fix: fix).description ==
-                "line 2, gaps.inner: use the new key (suggestion: replace 'old-key' with 'new-key')")
+        #expect(ConfigError(path: "gaps.inner", "expected an integer", line: 2).description ==
+                "line 2, gaps.inner: expected an integer")
     }
 
     @Test func `Configs without warnings stay equal to their defaults`() throws {
@@ -415,8 +395,9 @@ struct ConfigTests {
                                                        line: 2, fix: ConfigFix(replace: written, with: "0"))])
         }
 
-        // The fix replaces the sign too only when it is a minus: `+inf` becomes `+4`, still 4.
-        for (value, replacement) in [("inf", "inf"), ("+inf", "inf"), ("-inf", "-inf"), ("nan", "nan")] {
+        // Suggestions describe replacement values for a person; they are not executable source edits.
+        for (value, replacement) in [("inf", "inf"), ("+inf", "inf"), ("-inf", "-inf"),
+                                     ("nan", "nan"), ("+nan", "nan"), ("-nan", "-nan")] {
             let config = try Config.parse("[borders]\nwidth = \(value)\n")
             #expect(config.borders.width == 4)
             #expect(config.warnings == [ConfigWarning(

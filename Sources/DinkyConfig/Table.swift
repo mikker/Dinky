@@ -15,23 +15,14 @@ final class ConfigWarningSink {
 final class Table {
     let path: String
     private let table: TOMLTable
-    private let changes: KeyChanges
     let warningSink: ConfigWarningSink
     private var used: Set<String> = []
     /// Old key names already warned about, so reading a key twice warns once.
     private var compatibilityWarnings: Set<String> = []
 
-    init(_ table: TOMLTable, path: String = "", changes: KeyChanges = .shipped) {
+    init(_ table: TOMLTable, path: String = "", warningSink: ConfigWarningSink = ConfigWarningSink()) {
         self.table = table
         self.path = path
-        self.changes = changes
-        warningSink = ConfigWarningSink()
-    }
-
-    private init(_ table: TOMLTable, path: String, changes: KeyChanges, warningSink: ConfigWarningSink) {
-        self.table = table
-        self.path = path
-        self.changes = changes
         self.warningSink = warningSink
     }
 
@@ -57,15 +48,10 @@ final class Table {
 
     /// A value that must be one of `T`'s raw values, e.g. `'tiles'` for `LayoutKind`.
     func choice<T: RawRepresentable & CaseIterable>(_ key: String) throws -> T? where T.RawValue == String {
-        guard let raw = try string(key) else { return nil }
+        guard let actualKey = use(key), let raw = try string(actualKey) else { return nil }
         guard let value = T(rawValue: raw) else {
-            if let change = valueChange(for: key, old: raw) {
-                warn(key, "'\(change.old)' was renamed to '\(change.new)' in \(change.version)",
-                     fix: ConfigFix(replace: change.old, with: change.new))
-                return T(rawValue: change.new)
-            }
             let choices = T.allCases.map { "'\($0.rawValue)'" }.joined(separator: ", ")
-            throw ConfigError(path: path(key), "'\(raw)' is not one of \(choices)")
+            throw ConfigError(path: path(actualKey), "'\(raw)' is not one of \(choices)")
         }
         return value
     }
@@ -98,7 +84,7 @@ final class Table {
     func table(_ key: String) throws -> Table? {
         guard let actualKey = use(key) else { return nil }
         guard let nested = try? table.table(forKey: actualKey) else { throw ConfigError(path: path(actualKey), "expected a table") }
-        return Table(nested, path: path(actualKey), changes: changes, warningSink: warningSink)
+        return Table(nested, path: path(actualKey), warningSink: warningSink)
     }
 
     /// An array of tables, as written with `[[key]]`.
@@ -108,7 +94,7 @@ final class Table {
         return try (0..<array.count).map { index in
             let path = "\(path(actualKey))[\(index)]"
             guard let nested = try? array.table(atIndex: index) else { throw ConfigError(path: path, "expected a table") }
-            return Table(nested, path: path, changes: changes, warningSink: warningSink)
+            return Table(nested, path: path, warningSink: warningSink)
         }
     }
 
@@ -132,22 +118,17 @@ final class Table {
     }
 
     func done() throws {
-        for unknown in keys where !used.contains(unknown) {
-            if let change = keyChange(for: unknown), change.new == nil {
-                warn(unknown, "removed in \(change.version); ignored")
-                used.insert(unknown)
-            } else {
-                throw ConfigError(path: path(unknown), "unknown key")
-            }
+        if let unknown = keys.first(where: { !used.contains($0) }) {
+            throw ConfigError(path: path(unknown), "unknown key")
         }
     }
 
     /// Marks `key` as read, warning once about an old name; returns the name it is written under, nil if absent.
     private func use(_ key: String) -> String? {
+        let change = keyChangeForNew(key)
         if table.contains(key: key) {
             used.insert(key)
-            if let change = changes.keys.first(where: { $0.table == normalizedPath && $0.new == key }),
-               table.contains(key: change.old) {
+            if let change, table.contains(key: change.old) {
                 used.insert(change.old)
                 if compatibilityWarnings.insert(change.old).inserted {
                     warn(change.old, "ignored: '\(key)' is set (renamed from '\(change.old)' in \(change.version))")
@@ -155,15 +136,13 @@ final class Table {
             }
             return key
         }
-        guard let old = present(key), let new = keyChangeForNew(key)?.new, let change = keyChange(for: old) else {
-            return nil
+        guard let change, table.contains(key: change.old) else { return nil }
+        used.insert(change.old)
+        if compatibilityWarnings.insert(change.old).inserted {
+            warn(change.old, "renamed to '\(change.new)' in \(change.version); the old name still works",
+                 fix: ConfigFix(replace: change.old, with: change.new))
         }
-        used.insert(old)
-        if compatibilityWarnings.insert(old).inserted {
-            warn(old, "renamed to '\(new)' in \(change.version); the old name still works",
-                 fix: ConfigFix(replace: old, with: new))
-        }
-        return old
+        return change.old
     }
 
     /// The name `key` is written under in the TOML: itself, or the old name of a renamed key. Reads nothing.
@@ -194,16 +173,8 @@ final class Table {
         }
     }
 
-    private func keyChange(for key: String) -> KeyChange? {
-        changes.keys.first { $0.table == normalizedPath && $0.old == key }
-    }
-
     private func keyChangeForNew(_ key: String) -> KeyChange? {
-        changes.keys.first { $0.table == normalizedPath && $0.new == key }
-    }
-
-    private func valueChange(for key: String, old: String) -> ValueChange? {
-        changes.values.first { $0.table == normalizedPath && $0.key == key && $0.old == old }
+        KeyChange.shipped.first { $0.table == normalizedPath && $0.new == key }
     }
 
     private var normalizedPath: String {

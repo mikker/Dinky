@@ -1,6 +1,6 @@
 import Foundation
 
-/// A suggested one-line edit for a config issue: replace the first `replace` on the issue's line with `with`.
+/// A human-readable replacement suggestion, not a source span or an automatically applicable edit.
 public struct ConfigFix: Equatable {
     public var replace: String
     public var with: String
@@ -18,21 +18,19 @@ public struct ConfigError: Error, Equatable, CustomStringConvertible, LocalizedE
     public var path: String
     public var message: String
     public var line: Int?
-    public var fix: ConfigFix?
 
-    public init(path: String = "", _ message: String, line: Int? = nil, fix: ConfigFix? = nil) {
+    public init(path: String = "", _ message: String, line: Int? = nil) {
         self.path = path
         self.message = message
         self.line = line
-        self.fix = fix
     }
 
-    public var description: String { configIssueDescription(path: path, message: message, line: line, fix: fix) }
+    public var description: String { configIssueDescription(path: path, message: message, line: line) }
 
     public var errorDescription: String? { description }
 }
 
-/// A config problem that does not stop the config loading, such as a renamed key. Same fields as `ConfigError`.
+/// A config problem that does not stop loading, with an optional human-readable replacement suggestion.
 public struct ConfigWarning: Equatable, CustomStringConvertible {
     public var path: String
     public var message: String
@@ -49,7 +47,7 @@ public struct ConfigWarning: Equatable, CustomStringConvertible {
     public var description: String { configIssueDescription(path: path, message: message, line: line, fix: fix) }
 }
 
-private func configIssueDescription(path: String, message: String, line: Int?, fix: ConfigFix?) -> String {
+private func configIssueDescription(path: String, message: String, line: Int?, fix: ConfigFix? = nil) -> String {
     let location = [line.map { "line \($0)" }, path.isEmpty ? nil : path].compactMap { $0 }
     let description = location.isEmpty ? message : location.joined(separator: ", ") + ": " + message
     guard let fix else { return description }
@@ -65,7 +63,7 @@ func lineNumber(of path: String, in toml: String) -> Int? {
     var header: [String] = []
     var best: (line: Int, length: Int)?
     for (index, rawLine) in configLines(toml).enumerated() {
-        let line = rawLine.content.trimmingCharacters(in: .whitespaces)
+        let line = rawLine.trimmingCharacters(in: .whitespaces)
         let full: [String]
         if line.hasPrefix("[") {
             header = keyParts(tableKey(line))
