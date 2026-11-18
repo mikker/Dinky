@@ -16,6 +16,10 @@ file is left alone, with the read error shown in the menu.
 - Unknown keys are errors. A broken config does not load: the previous one
   stays and the error shows in the menu.
 - `dinky doctor [--config <path>]` also checks commands, modes and key names.
+- Renamed keys keep working under their old name, with a warning naming the new
+  key in `dinky doctor` and the menu. For example, `[master] orientation` was
+  renamed to `side` in 0.23. The schema lists old names as deprecated, so
+  editors don't mark them as unknown and don't offer them in completion.
 - The [JSON Schema](schemas/dinky.json) gives completion in editors that read
   Taplo's `#:schema` line, such as Zed or VS Code with Even Better TOML.
 
@@ -64,7 +68,8 @@ not restore macOS's persistent Space-switching preference; see
 ## `[workspace.<number>]`
 
 Override the top-level `default-tiling` and `default-layout` for a globally
-numbered workspace.
+numbered workspace. A table past `workspaces` does nothing; `dinky doctor`
+warns about it.
 
 <div class="wide-table" markdown="1">
 
@@ -244,7 +249,7 @@ its own.
 
 | Key | Default | |
 |---|---|---|
-| `padding` | `30` | Maximum points the neighbours peek out by; shrinks to leave window content in narrow containers and respect recorded window minima. |
+| `padding` | `30` | Maximum points the neighbours peek out by, 0 or more; a negative value gives a warning but is still used as written. It shrinks to leave window content in narrow containers and respect recorded window minima. |
 | `orientation` | `'auto'` | On switching to accordion, `'auto'` runs along the container's longer side; `'keep'` keeps its orientation. An orientation set with `layout` is always kept. |
 
 </div>
@@ -255,17 +260,20 @@ its own.
 
 | Key | Default | |
 |---|---|---|
-| `inner` | `8` | Between windows. Or `{ horizontal = 8, vertical = 6 }`. |
-| `outer` | `8` | To the screen edge. Or `{ top = 44, bottom = 8, left = 8, right = 8 }`, or `outer.top = 44`. |
+| `inner` | `8` | Points between windows, 0 or more; a negative value gives a warning but is still used as written. Or `{ horizontal = 8, vertical = 6 }`. |
+| `outer` | `8` | Points to the screen edge, 0 or more; a negative value gives a warning but is still used as written. Or `{ top = 44, bottom = 8, left = 8, right = 8 }`, or `outer.top = 44`. |
 
 </div>
 
 ## `[workspace-to-display]`
 
-Which display a workspace lives on, by number. A display pattern is `main`,
-`secondary` (the other one, when there are two), or part of the name from
-`dinky list-displays`. A list tries each in turn. Unlisted workspaces, and
-listed ones whose display isn't connected, live on the main display.
+Which display a workspace lives on, by number from 1 to `workspaces`. A
+display pattern is `main`, `secondary` (the other one, when there are two), or
+part of the name from `dinky list-displays`. A list tries each in turn.
+Unlisted workspaces, and listed ones whose display isn't connected, live on
+the main display. Keys are plain workspace numbers; `01` or `+1` is still read
+as workspace 1, with a warning; when two keys name one workspace, the last
+wins and the other is ignored, with a warning.
 
 ```toml
 [workspace-to-display]
@@ -328,7 +336,7 @@ fullscreen-width = 0.55
 | Key | Default | |
 |---|---|---|
 | `enabled` | `true` | |
-| `width` | `4` | Points; may be fractional. |
+| `width` | `4` | Points, 0 or more; may be fractional. A negative value gives a warning but is still used as written; `inf` or `nan` is read as the default with a warning. |
 | `active-color` | `'#e1e3e4'` | `'#rrggbb'` or `'#rrggbbaa'`. |
 | `inactive-color` | `'#494d64'` | |
 | `order` | `'below'` | `'above'` draws a click-through ring over the window. |
@@ -682,6 +690,13 @@ active-color = '#e1e3e4'        # '#rrggbb' or '#rrggbbaa'
 inactive-color = '#494d64'
 order = 'below'                 # below | above (a click-through ring over the window)
 exclude-apps = []               # bundle IDs whose windows get no border
+
+# Optional per-window decoration; independent of [[rules]] placement commands.
+# Last match wins; [borders].enabled = false and exclude-apps always veto.
+# [[borders.rules]]
+# app-id = 'com.example.editor'
+# window-identifier = '^DocumentSettingsWindow$' # AXIdentifier, not a numeric window ID
+# enabled = false
 
 [focus-follows-mouse]
 enabled = false

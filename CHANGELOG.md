@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Configuration
+
+- Config problems appear as read-only warnings in `dinky doctor` and the menu, with suggested replacements where useful (#73, thanks @ChrisGVE).
+- A config using a renamed key loads again with a warning naming the new key; for example, `[master] orientation`, renamed to `side` in 0.23, no longer makes the config fail to load.
+- The JSON schema lists renamed keys as deprecated, so editors such as Zed or VS Code no longer mark `[master] orientation` as an unknown key.
+
+### Fixes
+
+- Negative gaps, accordion padding and border widths, and workspace numbers written as `01` or `+1` in `[workspace-to-display]`, still load as before but now give a warning with a suggested fix, as does a workspace named by two keys there, where the last still wins. Before, nothing said they were out of range or that one key overrode the other. An `inf` or `nan` border width now loads as the default, with a warning; before, it was accepted as written.
+- `dinky doctor` warns about a `[workspace.<number>]` table past the last workspace. Before, nothing said the table did nothing.
+
 ## 0.29
 
 ### Configuration

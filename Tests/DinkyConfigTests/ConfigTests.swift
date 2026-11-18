@@ -3,6 +3,16 @@ import Testing
 @testable import DinkyConfig
 
 struct ConfigTests {
+    @Test func `The configuration page shows the default config as dinky writes it`() throws {
+        let page = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: "docs/configuration.md")
+        let text = try String(contentsOf: page, encoding: .utf8)
+        let section = try #require(text.range(of: "## Default config\n"))
+        let open = try #require(text.range(of: "```toml\n", range: section.upperBound..<text.endIndex))
+        let close = try #require(text.range(of: "\n```", range: open.upperBound..<text.endIndex))
+        #expect(String(text[open.upperBound..<close.lowerBound]) == Config.defaultTOML)
+    }
+
     @Test func `Default config loads`() throws {
         let config = try Config.parse(Config.defaultTOML)
         #expect(config == Config.default)
@@ -46,6 +56,81 @@ struct ConfigTests {
 
     @Test func `Empty config uses defaults`() throws {
         #expect(try Config.parse("") == Config())
+    }
+
+    @Test func `Warnings record nested paths and source lines`() throws {
+        let config = try Config.parse("[display.main.gaps]\ninner = -3\n")
+        #expect(config.warnings == [ConfigWarning(path: "display.main.gaps.inner",
+                                                "should be 0 or more; still read as -3", line: 2,
+                                                fix: ConfigFix(replace: "-3", with: "0"))])
+    }
+
+    @Test func `Renamed keys keep loading`() throws {
+        let old = try Config.parse("[master]\norientation = 'right'\n")
+        #expect(old.master.side == .right)
+        #expect(old.warnings == [ConfigWarning(
+            path: "master.orientation",
+            "renamed to 'side' in 0.23; the old name still works",
+            line: 2,
+            fix: ConfigFix(replace: "orientation", with: "side")
+        )])
+
+        let both = try Config.parse("[master]\norientation = 'left'\nside = 'right'\n")
+        #expect(both.master.side == .right)
+        #expect(both.warnings == [ConfigWarning(
+            path: "master.orientation",
+            "ignored: 'side' is set (renamed from 'orientation' in 0.23)",
+            line: 2
+        )])
+    }
+
+    @Test func `Invalid renamed choices report the key as written`() {
+        assertError("[master]\norientation = 'sideways'\n", path: "master.orientation", line: 2,
+                    contains: "'left', 'right', 'center'")
+        assertError("[master] # the big window\r\norientation = 'sideways'\r\n", path: "master.orientation", line: 2,
+                    contains: "'left', 'right', 'center'")
+    }
+
+    @Test(arguments: ["orientation = 'sideways'\nside = 'right'", "side = 'right'\norientation = 'sideways'"])
+    func `The current key wins even when the ignored old value is invalid`(keys: String) throws {
+        let config = try Config.parse("[master]\n\(keys)\n")
+        #expect(config.master.side == .right)
+        #expect(config.warnings.count == 1)
+        #expect(config.warnings.first?.path == "master.orientation")
+        #expect(config.warnings.first?.message.hasPrefix("ignored:") == true)
+    }
+
+    @Test func `Warnings and errors count a CRLF line break as one line`() throws {
+        let config = try Config.parse("[master]\r\norientation = 'left'\r\n")
+        #expect(config.warnings.map(\.line) == [2])
+        assertError("[master]\r\nsize = 0.95\r\n", path: "master.size", line: 2, contains: "0.1 to 0.9")
+        assertError("workspaces = 5\r\n\r\n[gaps]\r\nouter = 'wide'\r\n", path: "gaps.outer", line: 4, contains: "expected")
+    }
+
+    @Test func `Warnings and errors find their line under a table header with a comment`() throws {
+        let config = try Config.parse("[master] # the big window\norientation = 'left'\n")
+        #expect(config.warnings.map(\.line) == [2])
+        assertError("[master]   # the big window\nsize = 0.95\n", path: "master.size", line: 2, contains: "0.1 to 0.9")
+        assertError("[gaps]\ninner = 4\n[ master ] # ]\nsize = 0.95\n", path: "master.size", line: 4, contains: "0.1 to 0.9")
+    }
+
+    @Test func `Config lines break on CRLF, LF and CR only`() {
+        #expect(configLines("a\r\nb\nc\rd\u{0C}e\u{2028}f") == ["a", "b", "c", "d\u{0C}e\u{2028}f"])
+        #expect(configLines("x\n\n") == ["x", "", ""])
+        #expect(configLines("") == [""])
+    }
+
+    @Test func `Warnings format suggestions and errors retain their location`() {
+        let fix = ConfigFix(replace: "old-key", with: "new-key")
+        #expect(ConfigWarning(path: "gaps.inner", "use the new key", line: 2, fix: fix).description ==
+                "line 2, gaps.inner: use the new key (suggestion: replace 'old-key' with 'new-key')")
+        #expect(ConfigError(path: "gaps.inner", "expected an integer", line: 2).description ==
+                "line 2, gaps.inner: expected an integer")
+    }
+
+    @Test func `Configs without warnings stay equal to their defaults`() throws {
+        #expect(try Config.parse(Config.defaultTOML).warnings == [])
+        #expect(try Config.parse(Config.defaultTOML) == Config.default)
     }
 
     @Test func `Top-level keys`() throws {
@@ -267,6 +352,61 @@ struct ConfigTests {
         assertError("workspaces = true\n", path: "workspaces", line: 1, contains: "expected an integer")
         assertError("gaps = 8\n", path: "gaps", line: 1, contains: "expected a table")
         assertError("[accordion]\norientation = 'sideways'\n", path: "accordion.orientation", line: 2, contains: "'auto', 'keep'")
+    }
+
+    @Test func `Negative sizes load as written, with warnings`() throws {
+        // Older dinky loaded these values as written, so they still do; the warning suggests 0.
+        let inner = try Config.parse("[gaps]\ninner = -4\n")
+        #expect(inner.gaps.inner == Inner(-4))
+        #expect(inner.warnings == [ConfigWarning(path: "gaps.inner", "should be 0 or more; still read as -4", line: 2,
+                                                  fix: ConfigFix(replace: "-4", with: "0"))])
+
+        let innerTable = try Config.parse("[gaps]\ninner = { horizontal = 8, vertical = -1 }\n")
+        #expect(innerTable.gaps.inner == Inner(horizontal: 8, vertical: -1))
+        #expect(innerTable.warnings == [ConfigWarning(path: "gaps.inner.vertical", "should be 0 or more; still read as -1",
+                                                       line: 2, fix: ConfigFix(replace: "-1", with: "0"))])
+
+        let outer = try Config.parse("[gaps]\nouter = -8\n")
+        #expect(outer.gaps.outer == Sides(-8))
+        #expect(outer.warnings == [ConfigWarning(path: "gaps.outer", "should be 0 or more; still read as -8", line: 2,
+                                                  fix: ConfigFix(replace: "-8", with: "0"))])
+
+        let outerTable = try Config.parse("[gaps]\nouter = { top = 44, left = -8 }\n")
+        #expect(outerTable.gaps.outer == Sides(top: 44, bottom: 8, left: -8, right: 8))
+        #expect(outerTable.warnings == [ConfigWarning(path: "gaps.outer.left", "should be 0 or more; still read as -8",
+                                                       line: 2, fix: ConfigFix(replace: "-8", with: "0"))])
+
+        let display = try Config.parse("[display.main.gaps]\nouter = -8\n")
+        let patch = display.displays[0].gaps
+        #expect([patch.top, patch.bottom, patch.left, patch.right] == [-8, -8, -8, -8])
+        #expect(display.warnings == [ConfigWarning(path: "display.main.gaps.outer", "should be 0 or more; still read as -8",
+                                                   line: 2, fix: ConfigFix(replace: "-8", with: "0"))])
+
+        let accordion = try Config.parse("[accordion]\npadding = -5\n")
+        #expect(accordion.accordion.padding == -5)
+        #expect(accordion.warnings == [ConfigWarning(path: "accordion.padding", "should be 0 or more; still read as -5",
+                                                      line: 2, fix: ConfigFix(replace: "-5", with: "0"))])
+
+        for (value, number) in [("-2", -2.0), ("-2.0", -2.0), ("-2.5", -2.5)] {
+            let config = try Config.parse("[borders]\nwidth = \(value)\n")
+            let written = number == -2.5 ? "-2.5" : "-2"
+            #expect(config.borders.width == number)
+            #expect(config.warnings == [ConfigWarning(path: "borders.width", "should be 0 or more; still read as \(written)",
+                                                       line: 2, fix: ConfigFix(replace: written, with: "0"))])
+        }
+
+        // Suggestions describe replacement values for a person; they are not executable source edits.
+        for (value, replacement) in [("inf", "inf"), ("+inf", "inf"), ("-inf", "-inf"),
+                                     ("nan", "nan"), ("+nan", "nan"), ("-nan", "-nan")] {
+            let config = try Config.parse("[borders]\nwidth = \(value)\n")
+            #expect(config.borders.width == 4)
+            #expect(config.warnings == [ConfigWarning(
+                path: "borders.width",
+                "must be a finite number, 0 or more; using the default, 4",
+                line: 2,
+                fix: ConfigFix(replace: replacement, with: "4")
+            )])
+        }
     }
 
     @Test func accordion() throws {
