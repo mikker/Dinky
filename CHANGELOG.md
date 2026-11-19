@@ -2,22 +2,22 @@
 
 ## Unreleased
 
-### Compatibility
+**macOS 26 and earlier:** Add enough desktops in Mission Control (Control–↑) on each display for your configured workspaces. dinky still numbers, switches and tiles existing desktops, but automatic desktop creation and removal now require macOS 27 or later.
 
-- Automatic desktop creation and removal now require macOS 27 or later. On macOS 26, add and remove desktops in Mission Control; dinky still numbers, switches and tiles existing desktops. A one-time setup window, a Desktop Setup menu item and `dinky doctor` explain what to do and report missing desktops (#87).
+### Desktop setup
+
+- A one-time setup window explains manual desktop management, with an Open Mission Control button. Reopen the explanation from Desktop Setup in the menu. Missing desktops are flagged in the menu and `dinky doctor` (#87).
 
 ### Configuration
 
-- Config problems appear as read-only warnings in `dinky doctor` and the menu, with suggested replacements where useful (#73, thanks @ChrisGVE).
-- A config using a renamed key loads again with a warning naming the new key; for example, `[master] orientation`, renamed to `side` in 0.23, no longer makes the config fail to load.
-- The JSON schema lists renamed keys as deprecated, so editors such as Zed or VS Code no longer mark `[master] orientation` as an unknown key.
+- Config problems appear as read-only warnings in `dinky doctor` and the menu, with suggested replacements where useful. Your config file is never rewritten (#73, thanks @ChrisGVE).
+- Renamed keys load with a warning naming the replacement and appear as deprecated in the JSON schema. For example, `[master] orientation` still loads; use `side` instead.
+- Warnings cover negative gaps, accordion padding and border widths; noncanonical or duplicate workspace assignments; and workspace tables beyond `workspaces`. Accepted finite values keep their previous behavior. `inf` or `nan` border widths use the default, with a warning.
 
 ### Fixes
 
 - Long workspace jumps no longer replay a pending switch when the Dock is slow, preventing jumps past the requested workspace (#86, thanks @crytlig).
-- A display change during an arrangement discards the stale plan and preserves the original workspace identities and window homes for the next run (#87, thanks @ttilberg).
-- Negative gaps, accordion padding and border widths, and workspace numbers written as `01` or `+1` in `[workspace-to-display]`, still load as before but now give a warning with a suggested fix, as does a workspace named by two keys there, where the last still wins. Before, nothing said they were out of range or that one key overrode the other. An `inf` or `nan` border width now loads as the default, with a warning; before, it was accepted as written.
-- `dinky doctor` warns about a `[workspace.<number>]` table past the last workspace. Before, nothing said the table did nothing.
+- A display change during an arrangement preserves the original workspace identities and window homes for the next run (#87, thanks @ttilberg).
 - Both windows in a joined scrolling column stay above parked columns at a display edge, even when one half is already in front (#84, thanks @sigihuber).
 
 ## 0.29
