@@ -2,10 +2,15 @@
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 
-// Only the mimi augmented swipe is left; RESULTS.md records the paths the spike tried.
-// Swipes from fromIndex to toIndex (1-based) on the display with displayUUID and returns whether
-// posting succeeded. Refuses an unknown display. Does not wait for the switch, but warps the cursor to
-// that display for the swipe when it is elsewhere and waits about 60 ms to put it back.
+// Whether the native gesture supports an uninterrupted batch that skips intermediate redraws.
+// Legacy gestures must instead acknowledge each adjacent landing.
+bool dinky_can_batch_space_swipes(void);
+
+// Posts Space movement using legacy CGEvent fields before macOS 27 and augmented IOHID events from 27.
+// Indices are 1-based and include full-screen Spaces. Refuses nonadjacent legacy movement or an unknown
+// display; equal indices are a no-op. The entire movement is allocated before any input escapes, so false
+// means nothing was posted. True confirms posting, not landing: observe the destination before posting
+// again. If the cursor is elsewhere, warps to the display and pumps about 60 ms before restoring it.
 bool dinky_switch_to_space_index(int fromIndex, int toIndex, CFStringRef displayUUID);
 
 // Real Dock swipes, for the trackpad swipe tap (Swipe.swift).

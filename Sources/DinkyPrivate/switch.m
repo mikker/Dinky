@@ -250,18 +250,17 @@ static CGEventRef mimi_create_event(int phase, double rawSign)
 }
 
 // mimi's legacy swipe for macOS before 27: began and ended, the sign and velocity in the CGEvent fields.
-// Only the last swipe of a switch needs the slow velocity, since only the Space it lands on must redraw; the
-// ones before it go at kMimiVelocity and skip their animation, so a multi-Space switch shows one slide.
-static bool legacy_post_swipe(double sign, bool last)
+// SpaceSwitcher acknowledges each adjacent legacy movement before posting another. Every landing must
+// redraw: it may become the final destination if a newer request retargets the switch.
+static bool legacy_post_swipe(double sign)
 {
-    double velocity = last ? kLegacyVelocity : kMimiVelocity;
     CGEventRef event = CGEventCreate(NULL);
     if (!event) return false;
     CGEventSetIntegerValueField(event, kEventTypeField, kEventDockControl);
     CGEventSetIntegerValueField(event, kGestureHIDType, kHIDEventTypeDockSwipe);
     CGEventSetIntegerValueField(event, kGestureSwipeMotion, kGestureMotionHorizontal);
     CGEventSetDoubleValueField(event, kGestureSwipeProgress, sign);
-    CGEventSetDoubleValueField(event, kGestureSwipeVelocityX, sign * velocity);
+    CGEventSetDoubleValueField(event, kGestureSwipeVelocityX, sign * kLegacyVelocity);
     CGEventSetIntegerValueField(event, kGesturePhase, kPhaseBegan);
     post_dock_event(event);
     CGEventSetIntegerValueField(event, kGesturePhase, kPhaseEnded);
@@ -270,20 +269,30 @@ static bool legacy_post_swipe(double sign, bool last)
     return true;
 }
 
-// mimi mimiPostAugmentedDockSwipe. sign is +1 toward higher Space indices.
-static bool mimi_post_swipe(double sign)
+// mimi's augmented swipes skip intermediate redraws. Allocate the entire batch before posting: a
+// successful return must mean every step escaped, so SpaceSwitcher can own its exact final endpoint.
+static bool mimi_post_swipes(double sign, int count)
 {
     double rawSign = augmented_sign(sign);
     static const int phases[] = {kPhaseBegan, kPhaseChanged, kPhaseEnded};
-    for (size_t i = 0; i < sizeof(phases) / sizeof(phases[0]); i++) {
-        CGEventRef event = mimi_create_event(phases[i], rawSign);
-        if (!event) {
-            fprintf(stderr, "switch: failed to build augmented dock swipe event (phase=%d)\n", phases[i]);
-            return false;
+    size_t eventCount = (size_t)count * 3;
+    CGEventRef *events = calloc(eventCount, sizeof(CGEventRef));
+    if (!events) return false;
+    for (size_t i = 0; i < eventCount; i++) {
+        int phase = phases[i % 3];
+        events[i] = mimi_create_event(phase, rawSign);
+        if (!events[i]) {
+            fprintf(stderr, "switch: failed to build augmented dock swipe event (phase=%d)\n", phase);
+            for (size_t j = 0; j < i; j++) CFRelease(events[j]);
+            free(events);
+            return false; // no part of this batch has escaped
         }
-        post_dock_event(event);
-        CFRelease(event);
     }
+    for (size_t i = 0; i < eventCount; i++) {
+        post_dock_event(events[i]);
+        CFRelease(events[i]);
+    }
+    free(events);
     return true;
 }
 
@@ -305,15 +314,12 @@ static bool cursor_is_on_display(CGDirectDisplayID displayID)
     return CGRectContainsPoint(CGDisplayBounds(displayID), cursor_location());
 }
 
-// mimi MimiFocusSpaceUsingGesture, augmented branch. mimi pumps the run loop after every step and
-// once more for count+1 delays at the end. We post the steps back to back and let Swift poll for the
-// landing: with a pause between steps the display lands on each Space on the way, and macOS activates
-// the front app there, which puts it into the Cmd-Tab order. Back to back, only the last one counts.
+// SpaceSwitcher owns acknowledgment of the complete movement before posting another.
 //
 // The Dock swipes the display under the cursor; nothing in the event or the IOHID payload names a
 // display. So, as mimi, yabai and bobrwm do, warp the cursor to the centre of the target display
 // first. Unlike them we put it back afterwards, which costs two extra delays on a cross-display switch.
-static bool mimi_post_swipes(double sign, int count, CGDirectDisplayID displayID)
+static bool mimi_post_movement(double sign, int count, CGDirectDisplayID displayID)
 {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -331,11 +337,7 @@ static bool mimi_post_swipes(double sign, int count, CGDirectDisplayID displayID
         pump(kMimiStepDelay);  // mimi waits this long after its warp too
     }
 
-    bool augmented = requires_augmentation();
-    bool posted = true;
-    for (int i = 0; i < count && posted; i++) {
-        posted = augmented ? mimi_post_swipe(sign) : legacy_post_swipe(sign, i == count - 1);
-    }
+    bool posted = requires_augmentation() ? mimi_post_swipes(sign, count) : legacy_post_swipe(sign);
 
     if (warp) {
         pump(kMimiStepDelay);  // let the swipes land before the cursor leaves the display
@@ -356,6 +358,8 @@ static CGDirectDisplayID display_id_for_uuid(CFStringRef displayUUID)
     return kCGNullDirectDisplay;
 }
 
+bool dinky_can_batch_space_swipes(void) { return requires_augmentation(); }
+
 bool dinky_switch_to_space_index(int fromIndex, int toIndex, CFStringRef displayUUID)
 {
     CGDirectDisplayID displayID = displayUUID ? display_id_for_uuid(displayUUID) : kCGNullDirectDisplay;
@@ -363,7 +367,12 @@ bool dinky_switch_to_space_index(int fromIndex, int toIndex, CFStringRef display
         fprintf(stderr, "switch: no display with UUID %s\n", displayUUID ? [(__bridge NSString *)displayUUID UTF8String] : "(null)");
         return false;
     }
-    return mimi_post_swipes(toIndex > fromIndex ? 1.0 : -1.0, abs(toIndex - fromIndex), displayID);
+    if (!dinky_can_batch_space_swipes() && abs(toIndex - fromIndex) > 1) {
+        fputs("switch: legacy movement requires adjacent Space acknowledgment\n", stderr);
+        return false;
+    }
+    if (fromIndex == toIndex) return true;
+    return mimi_post_movement(toIndex > fromIndex ? 1.0 : -1.0, abs(toIndex - fromIndex), displayID);
 }
 
 // Real Dock swipes, read by the trackpad swipe tap the way iss (github.com/joshuarli/iss) reads them.

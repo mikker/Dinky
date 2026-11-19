@@ -16,7 +16,7 @@ struct WorkspacePublicationTests {
         lazy var switcher = SpaceSwitcher(currentSpace: { [unowned self] _ in snapshot[0].currentSpaceID },
                                          spaceIDs: { [unowned self] _ in snapshot[0].userSpaces },
                                          swipe: { [unowned self] _, _, _ in swipeOK }, clock: { [unowned self] in now },
-                                         pollAutomatically: false)
+                                         pollAutomatically: false, batchMovement: false)
         lazy var hooks = WorkspaceHooks(model: model, numbers: numbers, switcher: switcher) { [unowned self] new, old, _ in
             emitted.append("\(old)->\(new)")
         }
@@ -76,7 +76,7 @@ struct WorkspacePublicationTests {
         #expect(world.emitted == ["1->2"])
     }
 
-    @Test func successfulRetargetToObservedIntermediateCompletesWithoutANewSnapshot() {
+    @Test func retargetToObservedAdjacentEndpointCompletesWithoutANewSnapshot() {
         let world = World()
         #expect(world.switcher.request(30, on: "main"))
         world.publish([20, 10, 30], current: 20)
@@ -87,7 +87,6 @@ struct WorkspacePublicationTests {
             arrivals += 1
             world.model.reconcile()
         }))
-        world.now = 1_000_000_001
         world.switcher.poll()
         #expect(world.switcher.target(on: "main") == nil)
         #expect(arrivals == 1)
@@ -104,6 +103,9 @@ struct WorkspacePublicationTests {
             arrivals += 1
             world.model.reconcile()
         }))
+        world.publish([10, 20, 30], current: 20)
+        world.switcher.poll()
+        #expect(world.emitted.isEmpty)
         world.publish([10, 20, 30], current: 30)
         #expect(world.emitted.isEmpty)
         world.switcher.poll()
@@ -120,7 +122,6 @@ struct WorkspacePublicationTests {
         world.publish([20, 10, 30], current: 20)
         world.arrange {
             #expect(world.switcher.request(20, on: "main"))
-            world.now = 1_000_000_001
             world.switcher.poll()
             #expect(world.switcher.target(on: "main") == nil)
             #expect(world.emitted.isEmpty)
@@ -133,13 +134,13 @@ struct WorkspacePublicationTests {
         var obsoleteArrival = false
         #expect(world.switcher.request(30, on: "main", landed: { obsoleteArrival = true }))
         #expect(world.switcher.request(999, on: "main"))
-        world.publish([10, 20, 30], current: 30)
+        world.publish([10, 20, 30], current: 20)
         #expect(world.emitted.isEmpty)
-        // The first swipe landed, but the replacement target is gone. The real post path cancels it.
+        // The first adjacent step landed, but the replacement target is gone. Cancel without continuing.
         world.switcher.poll()
         #expect(world.switcher.target(on: "main") == nil)
         #expect(!obsoleteArrival)
-        #expect(world.emitted == ["1->3"])
+        #expect(world.emitted == ["1->2"])
     }
 
     @Test func postingFailureCompletesEvenWithUnchangedSnapshotAndBinding() {

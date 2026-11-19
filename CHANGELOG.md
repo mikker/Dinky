@@ -10,6 +10,7 @@
 
 ### Fixes
 
+- Long workspace jumps no longer replay a pending switch when the Dock is slow, preventing jumps past the requested workspace (#86, thanks @crytlig).
 - Negative gaps, accordion padding and border widths, and workspace numbers written as `01` or `+1` in `[workspace-to-display]`, still load as before but now give a warning with a suggested fix, as does a workspace named by two keys there, where the last still wins. Before, nothing said they were out of range or that one key overrode the other. An `inf` or `nan` border width now loads as the default, with a warning; before, it was accepted as written.
 - `dinky doctor` warns about a `[workspace.<number>]` table past the last workspace. Before, nothing said the table did nothing.
 - Both windows in a joined scrolling column stay above parked columns at a display edge, even when one half is already in front (#84, thanks @sigihuber).

@@ -16,7 +16,7 @@ struct WorkspaceHooksTests {
         lazy var switcher = SpaceSwitcher(currentSpace: { [unowned self] _ in snapshot[0].currentSpaceID },
                                          spaceIDs: { [unowned self] _ in snapshot[0].userSpaces },
                                          swipe: { _, _, _ in true }, clock: { [unowned self] in now },
-                                         pollAutomatically: false)
+                                         pollAutomatically: false, batchMovement: false)
         lazy var hooks = WorkspaceHooks(model: model, numbers: numbers, switcher: switcher) { [unowned self] new, old, i in
             emitted.append("\(i):\(old)->\(new)")
         }
@@ -37,10 +37,9 @@ struct WorkspaceHooksTests {
         func beginSwitch() { #expect(switcher.request(30, on: "main")) }
 
         func giveUp() {
-            now += 1_000_000_001
-            switcher.poll() // retry
-            now += 1_000_000_001
-            switcher.poll() // authoritative failure completion
+            switcher.poll() // acknowledge any observed adjacent step before timing out the next
+            now += 2_000_000_001
+            switcher.poll() // logical give-up; native movement is still owned
         }
 
         func publish(_ spaces: [UInt64], current: UInt64) {
@@ -65,6 +64,7 @@ struct WorkspaceHooksTests {
         let world = World()
         world.beginSwitch()
         world.publish([30, 20, 10], current: 20)
+        world.switcher.poll()
         #expect(world.emitted.isEmpty)
         world.publish([30, 20, 10], current: 30)
         #expect(world.emitted.isEmpty, "A matching snapshot is not authoritative flight completion")
@@ -78,6 +78,11 @@ struct WorkspaceHooksTests {
         let world = World()
         world.beginSwitch()
         world.publish([20, 10, 30], current: 20)
+        world.switcher.poll()
+        #expect(world.emitted.isEmpty)
+        // Reordering placed the origin between the acknowledged endpoint and final target.
+        world.publish([20, 10, 30], current: 10)
+        world.switcher.poll()
         #expect(world.emitted.isEmpty)
         world.publish([20, 10, 30], current: 30)
         world.switcher.poll()
@@ -112,6 +117,7 @@ struct WorkspaceHooksTests {
         let world = World()
         world.beginSwitch()
         world.publish([30, 20, 10], current: 20)
+        world.switcher.poll()
         world.publish([30, 10, 20], current: 10)
         #expect(world.emitted.isEmpty)
         world.publish([30, 10, 20], current: 30)

@@ -44,6 +44,15 @@ Workspaces are numbered across displays; see
 [`[workspace-to-display]`](configuration.md#workspace-to-display). A full-screen
 app's Space has no number, nor does the Space of a display without workspaces.
 
+### If a workspace switch stalls
+
+Switches wait for macOS to report the posted destination before sending more
+input. If the log says `waiting for pending Space`, the request has timed out
+but native movement is still outstanding; newer workspace commands wait behind
+it. Switching and desktop arrangements can remain paused if that destination is
+never observed. If they stay stuck, quit dinky, restart the Dock (`killall Dock`),
+then reopen dinky.
+
 ### Targeting a window
 
 `move-window-to-workspace`, `move-window-to-display`, `layout` and
