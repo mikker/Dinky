@@ -86,6 +86,34 @@ struct SpaceRemovalTests {
         }
     }
 
+    @Test(arguments: [false, true]) func topologyChangeDuringObservationOrDepartureFencesDestruction(duringWait: Bool) {
+        let numbers = WorkspaceNumbering()
+        numbers.binding = [1: 1]
+        var displays = [PlanDisplay(uuid: "L", monitor: Monitor(name: "Built-in", isMain: true, count: 1),
+                                    spaces: [6, 1], current: duringWait ? 6 : 1)]
+        var reads = 0
+        var destroyed: [UInt64] = []
+        numbers.noteTopologyChange(from: displays)
+        numbers.withArrangement {
+            let removal = SpaceRemoval(snapshot: {
+                reads += 1
+                if !duringWait && reads == 2 { numbers.noteTopologyChange(from: displays) }
+                return displays
+            }, destinations: { _ in [1] }, switchTo: { _, _ in true }, wait: { arrived in
+                displays[0].current = 1
+                let landed = arrived()
+                numbers.noteTopologyChange(from: displays)
+                return landed
+            }, canRemove: { _ in numbers.arrangementIsCurrent }, destroy: {
+                destroyed.append($0)
+                return true
+            })
+            #expect(!removal.remove(6))
+        }
+        #expect(destroyed.isEmpty)
+        #expect(numbers.topologyPending)
+    }
+
     @Test func boundOrOccupiedSpaceNeverDestroysEvenWhenInactive() {
         let server = Server()
         server.displays[0].current = 1

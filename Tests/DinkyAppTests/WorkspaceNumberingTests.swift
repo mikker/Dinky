@@ -152,6 +152,135 @@ struct WorkspaceNumberingTests {
         #expect(!numbers.topologyPending)
     }
 
+    @Test func topologyDuringArrangementRollsBackIdentityAndHomesBeforePublication() {
+        let numbers = WorkspaceNumbering()
+        numbers.binding = initial
+        numbers.homes = [102: 2]
+        numbers.pendingHomes = [202: 2]
+        var published: [[Int: UInt64]] = []
+        var changes: [Set<String>] = []
+        numbers.observe { changed in
+            published.append(numbers.binding)
+            changes.append(changed)
+        }
+        numbers.withArrangement {
+            numbers.renumber(plan, on: displays())
+            numbers.binding[4] = 50
+            numbers.noteTopologyChange(from: displays([10, 20, 30]))
+            #expect(!numbers.arrangementIsCurrent)
+            #expect(published.isEmpty)
+        }
+        #expect(numbers.topologyPending)
+        #expect(!numbers.arranging)
+        #expect(numbers.binding == initial)
+        #expect(numbers.homes == [102: 2])
+        #expect(numbers.pendingHomes == [202: 2])
+        #expect(published == [initial])
+        #expect(changes == [[]])
+        // First callback must capture the pre-arrangement identities, not the speculative numbering.
+        #expect(numbers.preservedSpaces(on: displays([10, 20, 30])) == [10, 20, 30, 40])
+    }
+
+    @Test func repeatedTopologyCallbackInvalidatesEvenWhileAlreadyPending() {
+        let numbers = WorkspaceNumbering()
+        numbers.binding = initial
+        let original = displays([10, 20, 30])
+        numbers.noteTopologyChange(from: original)
+        numbers.withArrangement {
+            #expect(numbers.arrangementIsCurrent)
+            numbers.binding[4] = 50
+            numbers.noteTopologyChange(from: [original[0]])
+            #expect(!numbers.arrangementIsCurrent)
+        }
+        #expect(numbers.topologyPending)
+        #expect(numbers.binding == initial)
+        #expect(numbers.preservedSpaces(on: original) == [10, 20, 30, 40])
+        // The next coherent arrangement can settle; no indefinitely missing-ID veto is needed.
+        numbers.withArrangement {
+            #expect(numbers.arrangementIsCurrent)
+            numbers.binding[4] = 50
+        }
+        #expect(!numbers.topologyPending)
+        #expect(numbers.binding[4] == 50)
+    }
+
+    @Test func invalidatedTransientPlanDoesNotKeepReplacementWorkspaceIdentity() {
+        let numbers = WorkspaceNumbering()
+        let plan = WorkspacePlan(count: 9, assignments: Dictionary(uniqueKeysWithValues:
+            (1...9).map { ($0, [.name($0 <= 5 ? "Dell" : "Built-in")]) }))
+        let original: [Int: UInt64] = [1: 1, 2: 6444, 3: 6445, 4: 6446, 5: 6447,
+                                       6: 7440, 7: 7433, 8: 7434, 9: 7435]
+        let dell = PlanDisplay(uuid: "D", monitor: Monitor(name: "Dell", isMain: true, count: 2),
+                               spaces: [1, 6444, 6445, 6446, 6447], current: 1)
+        let laptop = PlanDisplay(uuid: "L", monitor: Monitor(name: "Built-in", isMain: false, count: 2),
+                                 spaces: [7440, 7433, 7434, 7435], current: 7440)
+        var transient = [PlanDisplay(uuid: "L", monitor: Monitor(name: "Built-in", isMain: true, count: 1),
+                                     spaces: [7441, 7433, 7434, 7435], current: 7441)]
+        numbers.binding = original
+        numbers.noteTopologyChange(from: [dell, laptop])
+        numbers.withArrangement {
+            // Replay the reporter's five creates, then observe reconnect before the next action.
+            for id: UInt64 in 7443...7447 {
+                let step = plan.step(transient, binding: numbers.binding, occupied: [],
+                                     preserving: numbers.preservedSpaces(on: transient))
+                #expect(step.action == .create(display: "L"))
+                numbers.binding = step.binding
+                transient[0].spaces.append(id)
+            }
+            numbers.binding = plan.step(transient, binding: numbers.binding, occupied: [],
+                                        preserving: numbers.preservedSpaces(on: transient)).binding
+            #expect(numbers.binding[6] == 7447)
+            numbers.noteTopologyChange(from: transient)
+            #expect(!numbers.arrangementIsCurrent)
+        }
+        #expect(numbers.binding == original)
+        #expect(numbers.topologyPending)
+        numbers.withArrangement {
+            // The old identities return. Created native Spaces may remain, but cannot steal w6's identity.
+            let step = plan.step([dell, laptop], binding: numbers.binding, occupied: [],
+                                 preserving: numbers.preservedSpaces(on: [dell, laptop]))
+            #expect(step.action == nil)
+            #expect(step.binding == original)
+        }
+        #expect(!numbers.topologyPending)
+    }
+
+    @Test(arguments: [true, false]) func lateInvalidationRestoresConsumedDisplacedObligation(enabled: Bool) {
+        let numbers = WorkspaceNumbering()
+        numbers.binding = initial
+        numbers.displaced.displaysChanged()
+        numbers.noteTopologyChange(from: displays())
+        var publishedPending: [Bool] = []
+        numbers.observe { _ in publishedPending.append(numbers.displaced.pending) }
+        numbers.withArrangement {
+            #expect(numbers.displaced.arranged(enabled: enabled, completed: true) == (enabled ? .returnThem : .leaveThem))
+            #expect(!numbers.displaced.pending)
+            // returnDisplaced/final reconciliation sees a main-display change, not a new disconnect.
+            // Such a change invalidates the plan without calling displaced.displaysChanged again.
+            numbers.noteTopologyChange(from: displays())
+        }
+        #expect(numbers.topologyPending)
+        #expect(numbers.displaced.pending)
+        #expect(publishedPending == [true], "Restore recovery before publishing the rolled-back identities")
+        numbers.withArrangement {
+            #expect(numbers.displaced.arranged(enabled: enabled, completed: true) == (enabled ? .returnThem : .leaveThem))
+        }
+        #expect(!numbers.topologyPending)
+        #expect(!numbers.displaced.pending)
+        #expect(publishedPending == [true, false])
+    }
+
+    @Test func invalidationKeepsNewDisplacedObligationWhenNoneWasPendingAtEntry() {
+        let numbers = WorkspaceNumbering()
+        numbers.withArrangement {
+            #expect(!numbers.displaced.pending)
+            numbers.noteTopologyChange(from: displays())
+            numbers.displaced.displaysChanged()
+        }
+        #expect(numbers.topologyPending)
+        #expect(numbers.displaced.pending, "Cancellation must not overwrite a newer display callback")
+    }
+
     @Test func renumberRemapsBothHomeGenerationsWithoutSamplingWindows() {
         let numbers = WorkspaceNumbering()
         numbers.binding = initial

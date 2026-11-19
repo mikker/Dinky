@@ -20,10 +20,6 @@ final class WorkspaceNumbers: WorkspaceNumbering {
     private var removed: Set<UInt64> = []
     /// The displays as the last display change left them.
     private var knownDisplays: Set<String> = []
-    /// Whether windows a display change moved go back after the next arrangement, and only then: returning
-    /// them after a later run, such as a config reload long after, would undo whatever the user moved since.
-    private var displaced = DisplacedWindows()
-
     var count: Int { AppState.shared.config.workspaces }
 
     func space(of n: Int) -> UInt64? { binding[n] }
@@ -90,17 +86,20 @@ final class WorkspaceNumbers: WorkspaceNumbering {
         guard !AppState.shared.enabled || !SpaceSwitcher.shared.switching else { return arrangeSoon(after: 0.3) }
         withArrangement {
             waitForListedSpaces()
+            guard arrangementIsCurrent else { return }
             if AppState.shared.enabled {
                 arrangeSpaces()
             } else {
+                numberInPlace()
+                guard arrangementIsCurrent else { return }
                 // Windows stay where macOS put them, and homes are noted again from here.
                 if displaced.arranged(enabled: false, completed: false) == .leaveThem {
                     print("\(stamp()) workspaces: windows a display change moved while dinky was disabled stay where they are")
                 }
-                numberInPlace()
             }
         }
         fflush(stdout)
+        guard !topologyPending else { return arrangeSoon() }
         onArranged?()
     }
 
@@ -111,7 +110,8 @@ final class WorkspaceNumbers: WorkspaceNumbering {
             let displays = planDisplays()
             return !Set(binding.values).isSubset(of: displays.flatMap(\.spaces))
         }
-        if unlisted() { _ = waitUntil(2) { !unlisted() } }
+        // A timeout alone is not invalidation: macOS may really have collapsed these Spaces.
+        if unlisted(), arrangementIsCurrent { _ = waitForArrangement(2) { !unlisted() } }
     }
 
     /// Every planner action may refresh displays; the caller's publication scope covers all of them,
@@ -121,10 +121,13 @@ final class WorkspaceNumbers: WorkspaceNumbering {
         defer { logSnapshot("after arrangement", planDisplays()) }
         logSnapshot("before arrangement", planDisplays())
         // Following the Space order, Spaces reordered since the last run are renumbered rather than put back.
-        if AppState.shared.config.followSpaceOrder, !topologyPending { renumber(plan, on: planDisplays()) }
+        let initial = planDisplays()
+        guard arrangementIsCurrent else { return }
+        if AppState.shared.config.followSpaceOrder, !topologyPending { renumber(plan, on: initial) }
         var completed = false
         for _ in 0..<50 {
             let displays = planDisplays()
+            guard arrangementIsCurrent else { return }
             guard !displays.isEmpty else { break }
             let occupied = occupiedSpaces(among: displays.flatMap(\.spaces))
             let before = binding
@@ -134,13 +137,17 @@ final class WorkspaceNumbers: WorkspaceNumbering {
                 completed = true
                 break
             }
-            guard perform(action) else {
+            let performed = perform(action)
+            guard arrangementIsCurrent else { return }
+            guard performed else {
                 // A workspace whose windows did not all move stays where they are, so the next run moves it again.
                 if case .move = action { binding = before }
                 print("\(stamp()) workspaces: stopped; the next display change or config reload tries again")
                 break
             }
         }
+        _ = planDisplays()
+        guard arrangementIsCurrent else { return }
         switch displaced.arranged(enabled: true, completed: completed) {
         case .returnThem: returnDisplaced()
         case .leaveThem: print("\(stamp()) workspaces: windows a display change moved off their workspace stay where they are")
@@ -155,6 +162,7 @@ final class WorkspaceNumbers: WorkspaceNumbering {
     /// windows are on; one it would create stays unbound until enabling creates it.
     private func numberInPlace() {
         let displays = planDisplays()
+        guard arrangementIsCurrent else { return }
         let plan = WorkspacePlan(AppState.shared.config)
         if AppState.shared.config.followSpaceOrder, !topologyPending { renumber(plan, on: displays) }
         let step = plan.step(displays, binding: binding, occupied: occupiedSpaces(among: displays.flatMap(\.spaces)), preserving: preservedSpaces(on: displays))
@@ -227,11 +235,13 @@ final class WorkspaceNumbers: WorkspaceNumbering {
         }
         guard !targets.isEmpty else { return }
         for (target, moving) in Dictionary(grouping: targets.keys, by: { targets[$0]! }) {
+            _ = planDisplays()
+            guard arrangementIsCurrent else { return }
             var ids = moving
             _ = dinky_move_windows_to_space(&ids, Int32(ids.count), target)
         }
         let arrived = { targets.filter { dinky_window_space_id($0.key) == $0.value }.count }
-        _ = waitUntil(1) { arrived() == targets.count }
+        _ = waitForArrangement(1) { arrived() == targets.count }
         print("\(stamp()) workspaces: returned \(arrived()) of \(targets.count) windows a display change moved off their workspace")
     }
 
@@ -248,13 +258,25 @@ final class WorkspaceNumbers: WorkspaceNumbering {
     /// Whether a Space has windows dinky would tile or restore there.
     private func occupied(_ space: UInt64) -> Bool { !occupiedSpaces(among: [space]).isEmpty }
 
+    /// Stop polling immediately on invalidation, without mistaking cancellation for success.
+    private func waitForArrangement(_ seconds: Double, _ condition: () -> Bool) -> Bool {
+        let satisfied = waitUntil(seconds) {
+            AppState.shared.displays.reconcile()
+            return !self.arrangementIsCurrent || condition()
+        }
+        return satisfied && arrangementIsCurrent
+    }
+
     private func perform(_ action: PlanAction) -> Bool {
+        // A step is only valid for the topology from which its binding was derived.
+        _ = planDisplays()
+        guard arrangementIsCurrent else { return false }
         let model = AppState.shared.displays
         switch action {
         case .create(let uuid):
             let name = model.displays.first { $0.uuid == uuid }.map(displayName) ?? uuid
             let space = dinky_create_space(uuid as CFString)
-            guard space != 0, waitUntil(2, { model.reconcile(); return model.display(containingSpace: space) != nil }) else {
+            guard space != 0, waitForArrangement(2, { model.display(containingSpace: space) != nil }) else {
                 print("\(stamp()) workspaces: could not create a Space on \(name)")
                 return false
             }
@@ -266,8 +288,9 @@ final class WorkspaceNumbers: WorkspaceNumbering {
             var ids = dinky_space_window_ids(from, true).map(\.uint32Value)
             AppState.shared.coordinator?.moveTree(from: from, to: to)
             if !ids.isEmpty, dinky_move_windows_to_space(&ids, Int32(ids.count), to) {
-                _ = waitUntil(1) { !occupied(from) }
+                _ = waitForArrangement(1) { !occupied(from) }
             }
+            guard arrangementIsCurrent else { return false }
             guard !occupied(from) else {
                 AppState.shared.coordinator?.moveTree(from: to, to: from)
                 print("\(stamp()) workspaces: windows stayed on Space \(from) instead of moving to \(to)")
@@ -285,15 +308,16 @@ final class WorkspaceNumbers: WorkspaceNumbering {
                     return (previous.map { [$0] } ?? []) + self.workspaces(on: display).compactMap(self.space(of:))
                 },
                 switchTo: { target, uuid in
-                    guard let display = model.displays.first(where: { $0.uuid == uuid }) else { return false }
+                    guard self.arrangementIsCurrent,
+                          let display = model.displays.first(where: { $0.uuid == uuid }) else { return false }
                     return switchSpace(toSpaceID: target, on: display)
                 },
-                wait: { waitUntil(1.5, $0) },
-                canRemove: { self.number(of: $0) == nil && !self.occupied($0) },
-                destroy: { dinky_destroy_space($0) }
+                wait: { self.waitForArrangement(1.5, $0) },
+                canRemove: { self.arrangementIsCurrent && self.number(of: $0) == nil && !self.occupied($0) },
+                destroy: { self.arrangementIsCurrent && dinky_destroy_space($0) }
             )
             guard removal.remove(space),
-                  waitUntil(2, { model.reconcile(); return model.display(containingSpace: space) == nil }) else {
+                  waitForArrangement(2, { model.display(containingSpace: space) == nil }) else {
                 print("\(stamp()) workspaces: could not safely remove Space \(space)")
                 logSnapshot("removal stopped", planDisplays())
                 return false

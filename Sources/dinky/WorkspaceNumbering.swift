@@ -8,8 +8,16 @@ class WorkspaceNumbering {
     /// Window homes while the displays were settled, plus the sample awaiting a second settled tick.
     var homes: [UInt32: Int] = [:]
     var pendingHomes: [UInt32: Int]?
+    /// Windows displaced by a display change are recovered only by the next coherent arrangement.
+    var displaced = DisplacedWindows()
     private(set) var arranging = false
     private(set) var topologyPending = false
+    private var topologyGeneration: UInt64 = 0
+    private var arrangementGeneration: UInt64?
+    private var arrangementBinding: [Int: UInt64]?
+
+    /// A refreshed observation may invalidate the plan even when a topology transition was already pending.
+    var arrangementIsCurrent: Bool { arrangementGeneration == topologyGeneration }
     /// Old workspace/Space/display identities, captured before macOS's transient new Space list.
     /// Keep these across arrangements; the next config reload must not undo preservation.
     private var topologyHomes: [Int: (space: UInt64, display: String)] = [:]
@@ -23,21 +31,50 @@ class WorkspaceNumbering {
     func noteTopologyChange(from before: [PlanDisplay]) {
         // Only the first callback has a settled `before`. Further callbacks in this chain may list a
         // Space on a temporary host, even when its original display is still connected.
+        topologyGeneration &+= 1
         guard !topologyPending else { return }
         topologyPending = true
         topologyHomes = [:]
-        for (n, space) in binding {
+        for (n, space) in arrangementBinding ?? binding {
             guard let old = before.first(where: { $0.spaces.contains(space) }) else { continue }
             topologyHomes[n] = (space, old.uuid)
         }
     }
 
-    /// Enabled arrangements and disabled numbering share one settlement/publication boundary. Both must
-    /// finish the topology transition so later deliberate reorders are not mistaken for docking fallout.
+    /// Enabled arrangements and disabled numbering share one settlement/publication boundary. Only an
+    /// uninterrupted topology generation settles; an invalidated run keeps the original identity journal.
     func withArrangement<T>(_ update: () throws -> T) rethrows -> T {
         arranging = true
-        defer { arranging = false; topologyPending = false }
-        return try withUpdates(update)
+        arrangementGeneration = topologyGeneration
+        let originalBinding = binding
+        arrangementBinding = originalBinding
+        let originalRenumberedDisplays = renumberedDisplays
+        let originalHomes = homes
+        let originalPendingHomes = pendingHomes
+        let hadDisplacedWindows = displaced.pending
+        defer {
+            arranging = false
+            arrangementGeneration = nil
+            arrangementBinding = nil
+        }
+        return try withUpdates {
+            defer {
+                if arrangementIsCurrent {
+                    topologyPending = false
+                } else {
+                    // Native steps cannot be undone, but a transient snapshot must not replace identities
+                    // or window homes. The next arrangement plans afresh from the original journal.
+                    binding = originalBinding
+                    homes = originalHomes
+                    pendingHomes = originalPendingHomes
+                    renumberedDisplays = originalRenumberedDisplays
+                    // Recovery can itself refresh topology after consuming this obligation. Restore it,
+                    // without overwriting a newer display callback's pending recovery.
+                    if hadDisplacedWindows { displaced.displaysChanged() }
+                }
+            }
+            return try update()
+        }
     }
 
     /// A genuine strip reorder (not a current-Space change or create/remove) restores the ordinary
