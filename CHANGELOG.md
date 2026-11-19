@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Compatibility
+
+- Automatic desktop creation and removal now require macOS 27 or later. On macOS 26, add and remove desktops in Mission Control; dinky still numbers, switches and tiles existing desktops. A one-time setup window, a Desktop Setup menu item and `dinky doctor` explain what to do and report missing desktops (#87).
+
 ### Configuration
 
 - Config problems appear as read-only warnings in `dinky doctor` and the menu, with suggested replacements where useful (#73, thanks @ChrisGVE).

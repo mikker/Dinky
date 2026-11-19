@@ -70,9 +70,11 @@ public struct WorkspacePlan {
     /// changes Space; windows only ever go to an empty Space, so two sets never mix. Then empty Spaces no
     /// workspace is on are removed; one is kept on a display with no workspace, which macOS requires anyway.
     /// A leftover Space with windows is left alone.
+    /// Without `manageSpaces`, uses available Spaces only: missing capacity stays unbound (or on its old
+    /// Space), and extra Spaces stay untouched. Window moves between existing Spaces still run.
     /// `preserving` exempts surviving-display bindings from numeric order after a topology change.
     /// They reserve their Spaces but do not constrain where arriving workspaces may be placed.
-    public func step(_ displays: [PlanDisplay], binding: [Int: UInt64], occupied: Set<UInt64>, preserving: Set<UInt64> = []) -> PlanStep {
+    public func step(_ displays: [PlanDisplay], binding: [Int: UInt64], occupied: Set<UInt64>, preserving: Set<UInt64> = [], manageSpaces: Bool = true) -> PlanStep {
         let all = Set(displays.flatMap(\.spaces))
         // Forget Spaces that are gone and workspaces past the count; one workspace per Space.
         var binding = binding.filter { n, space in numbers.contains(n) && all.contains(space) }
@@ -93,7 +95,8 @@ public struct WorkspacePlan {
                 guard let at = display.spaces.indices.first(where: { i in
                     i > last && !bound.contains(display.spaces[i]) && (old == nil || !occupied.contains(display.spaces[i]))
                 }) else {
-                    return PlanStep(binding: binding, action: .create(display: display.uuid))
+                    if manageSpaces { return PlanStep(binding: binding, action: .create(display: display.uuid)) }
+                    continue
                 }
                 binding[n] = display.spaces[at]
                 last = at
@@ -101,6 +104,7 @@ public struct WorkspacePlan {
             }
         }
 
+        guard manageSpaces else { return PlanStep(binding: binding, action: nil) }
         let bound = Set(binding.values)
         for display in displays {
             let hasWorkspace = display.spaces.contains(where: bound.contains)

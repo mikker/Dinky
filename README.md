@@ -20,6 +20,11 @@ Open dinky and grant Accessibility when asked. Windows tile as they open.
 - `dinky layout accordion`: Stack the focused container.
 - `dinky doctor`: Check the config, the macOS settings dinky needs, and that no other tiler is running.
 
+**macOS 26:** Create and remove desktops in Mission Control (Control–↑). dinky
+numbers, switches and tiles existing desktops, but automatic desktop creation
+and removal require macOS 27 or later. Add enough desktops on each display for
+your configured workspaces; `dinky doctor` reports shortages.
+
 Learn more:
 
 - [Concepts](https://dinky.rodeo/concepts/) and [Layouts](https://dinky.rodeo/layouts/)

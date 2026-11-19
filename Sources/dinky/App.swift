@@ -91,7 +91,8 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             hotkeysActive = keys
             print(keys ? "app: key bindings on" : "app: key bindings off, could not create the keyboard event tap (Accessibility?)")
         }
-        let trouble = state.configError != nil || !state.config.warnings.isEmpty || !otherTilers.isEmpty || !hotkeysActive
+        let missingDesktops = !dinky_can_manage_spaces() && !state.numbers.missing.isEmpty
+        let trouble = state.configError != nil || !state.config.warnings.isEmpty || !otherTilers.isEmpty || !hotkeysActive || missingDesktops
         guard let button = statusItem.button else { return }
         let title = (workspace.map { "\($0)" } ?? "?") + (trouble ? "!" : "")
         let disabled = !state.enabled
@@ -113,6 +114,18 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let count = state.numbers.count
         let current = state.displays.focusedDisplay().flatMap(state.numbers.current(on:))
         menu.addItem(withTitle: "Workspace \(current.map { "\($0)" } ?? "?") of \(count)", action: nil, keyEquivalent: "")
+        if !dinky_can_manage_spaces() {
+            let missing = state.numbers.missing
+            if !missing.isEmpty {
+                let subject = missing.count == 1 ? "Workspace" : "Workspaces"
+                let requirement = missing.count == 1 ? "needs a desktop" : "need desktops"
+                menu.addItem(withTitle: "\(subject) \(missing.map(String.init).joined(separator: ", ")) \(requirement)",
+                             action: nil, keyEquivalent: "")
+            }
+            let setup = NSMenuItem(title: "Desktop Setup…", action: #selector(showDesktopSetup(_:)), keyEquivalent: "")
+            setup.target = self
+            menu.addItem(setup)
+        }
         if mode != "main" {
             menu.addItem(withTitle: "Mode: \(mode)", action: nil, keyEquivalent: "")
         }
@@ -134,11 +147,15 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let go = NSMenu()
         let moveTo = NSMenu()
         let moveFollow = NSMenu()
+        // These commands exist even when their workspace has no desktop. Honor explicit availability
+        // rather than AppKit's action-based validation, which would enable them again.
+        for menu in [go, moveTo, moveFollow] { menu.autoenablesItems = false }
         for n in 1...max(count, 1) {
             let title = "Workspace \(n)" + (n == current ? " (current)" : "")
-            go.addItem(item(title, "workspace \(n)", enabled: n != current))
-            moveTo.addItem(item(title, "move-window-to-workspace \(n)", enabled: n != current))
-            moveFollow.addItem(item(title, "move-window-to-workspace \(n) --follow", enabled: n != current))
+            let available = n != current && state.numbers.space(of: n) != nil
+            go.addItem(item(title, "workspace \(n)", enabled: available))
+            moveTo.addItem(item(title, "move-window-to-workspace \(n)", enabled: available))
+            moveFollow.addItem(item(title, "move-window-to-workspace \(n) --follow", enabled: available))
         }
         for menu in [go, moveTo, moveFollow] { menu.addItem(.separator()) }
         go.addItem(item("Previous", "workspace prev"))
@@ -216,6 +233,10 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updates.target = self
         menu.addItem(updates)
         menu.addItem(NSMenuItem(title: "Quit dinky", action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
+    }
+
+    @objc private func showDesktopSetup(_ sender: NSMenuItem) {
+        onboarding.showSpaceManagementStep()
     }
 
     private func item(_ title: String, _ command: String, enabled: Bool = true) -> NSMenuItem {

@@ -13,7 +13,8 @@ Seven nouns. The rest of the manual is verbs.
 
 A numbered native Space. `workspaces = 5` gives you 1 to 5 across every display,
 and `workspace 3` switches there in about 70 ms. Each workspace has its own
-[layout](layouts.md).
+[layout](layouts.md). On macOS 26, [add the desktops in Mission Control](configuration.md#desktop-setup-on-macos-26)
+first; automatic desktop creation and removal require macOS 27 or later.
 
 <figure class="wide">
 {% include figures/workspaces.svg %}

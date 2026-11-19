@@ -31,8 +31,18 @@ static SLSPerformSynchronousBridgedWindowManagementOperationFn dinky_sync_dispat
 - (uint64_t)spaceID;
 @end
 
+bool dinky_can_manage_spaces(void)
+{
+    if (@available(macOS 27.0, *)) return true;
+    return false;
+}
+
 uint64_t dinky_create_space(CFStringRef displayUUID)
 {
+    if (!dinky_can_manage_spaces()) {
+        fputs("spaces: automatic desktop creation requires macOS 27 or later; use Mission Control\n", stderr);
+        return 0;
+    }
     SLSPerformSynchronousBridgedWindowManagementOperationFn perform = dinky_sync_dispatcher();
     if (!perform) {
         fputs("spaces: _SLSPerformSynchronousBridgedWindowManagementOperation not found in SkyLight symtab\n", stderr);
@@ -75,6 +85,10 @@ uint64_t dinky_create_space(CFStringRef displayUUID)
 
 bool dinky_destroy_space(uint64_t spaceID)
 {
+    if (!dinky_can_manage_spaces()) {
+        fputs("spaces: automatic desktop removal requires macOS 27 or later; use Mission Control\n", stderr);
+        return false;
+    }
     Class cls = objc_getClass("SLSBridgedSpaceDestroyOperation");
     if (!cls) {
         fputs("spaces: class SLSBridgedSpaceDestroyOperation not found\n", stderr);

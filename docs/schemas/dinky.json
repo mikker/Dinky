@@ -15,7 +15,7 @@
       "type": "integer",
       "minimum": 1,
       "default": 5,
-      "description": "Workspaces across all displays, numbered from 1, one native Space each. dinky creates and removes Spaces to match."
+      "description": "Workspaces across all displays, numbered from 1, one native Space each. On macOS 27+, dinky creates and removes Spaces to match. On macOS 26, add and remove desktops in Mission Control."
     },
     "follow-space-order": {
       "type": "boolean",

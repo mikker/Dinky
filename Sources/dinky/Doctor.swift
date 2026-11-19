@@ -44,7 +44,12 @@ func runDoctor(_ args: [String]) -> Int32 {
         status.warning ? warn(status.message) : ok(status.message)
     }
 
-    // Where the workspaces go with the displays connected now; the app arranges the Spaces to match.
+    let managesSpaces = dinky_can_manage_spaces()
+    if !managesSpaces {
+        warn("automatic desktop creation and removal require macOS 27 or later; manage desktops in Mission Control (Control–↑)")
+    }
+
+    // Where the workspaces go with the displays connected now.
     let connected = dinky_displays()
     let displays = connected.map { d in
         PlanDisplay(uuid: d.uuid, monitor: Monitor(name: screen(of: d.displayID)?.localizedName ?? "",
@@ -55,9 +60,8 @@ func runDoctor(_ args: [String]) -> Int32 {
     for (i, display) in displays.enumerated() {
         let label = display.monitor.name.isEmpty ? "display \(i + 1)" : "display \(i + 1) (\(display.monitor.name))"
         let here = homes.filter { $0.value == display.uuid }.keys.sorted()
-        let spaces = "\(display.spaces.count) Space\(display.spaces.count == 1 ? "" : "s")"
-        ok(here.isEmpty ? "\(label) has \(spaces) and no workspaces"
-                        : "\(label) has \(spaces) for workspace\(here.count == 1 ? "" : "s") \(here.map(String.init).joined(separator: ", "))")
+        let status = desktopCapacityStatus(label: label, spaces: display.spaces.count, workspaces: here, managesSpaces: managesSpaces)
+        status.error ? fail(status.message) : ok(status.message)
     }
 
     let tilers = runningOtherTilers()
@@ -72,6 +76,16 @@ func runDoctor(_ args: [String]) -> Int32 {
 
     print("\(errors) errors, \(warnings) warnings")
     return errors == 0 ? 0 : 1
+}
+
+/// Missing desktops need user action only when the app cannot create them.
+func desktopCapacityStatus(label: String, spaces: Int, workspaces: [Int], managesSpaces: Bool) -> (error: Bool, message: String) {
+    let available = "\(spaces) Space\(spaces == 1 ? "" : "s")"
+    let required = "workspace\(workspaces.count == 1 ? "" : "s") \(workspaces.map(String.init).joined(separator: ", "))"
+    if !managesSpaces, spaces < workspaces.count {
+        return (true, "\(label) has \(available), but needs \(workspaces.count) for \(required); add desktops in Mission Control")
+    }
+    return (false, workspaces.isEmpty ? "\(label) has \(available) and no workspaces" : "\(label) has \(available) for \(required)")
 }
 
 /// Describes the persistent macOS preference, not whether the app is running. Never changes it.

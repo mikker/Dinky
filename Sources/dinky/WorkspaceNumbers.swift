@@ -21,6 +21,7 @@ final class WorkspaceNumbers: WorkspaceNumbering {
     /// The displays as the last display change left them.
     private var knownDisplays: Set<String> = []
     var count: Int { AppState.shared.config.workspaces }
+    var missing: [Int] { stride(from: 1, through: count, by: 1).filter { binding[$0] == nil } }
 
     func space(of n: Int) -> UInt64? { binding[n] }
     func number(of space: UInt64) -> Int? { binding.first { $0.value == space }?.key }
@@ -61,10 +62,14 @@ final class WorkspaceNumbers: WorkspaceNumbering {
             arrangeSoon()
         }
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.noteHomes() }
-        // A Space removed in Mission Control leaves its workspace without one.
+        // Manual desktop creation can fill an unbound workspace on systems without lifecycle support.
         EventHub.shared.subscribe { [weak self] event in
-            guard let self, event.kind == .spaceDestroyed, !arranging, removed.remove(event.spaceID) == nil else { return }
-            arrangeSoon()
+            guard let self, !arranging else { return }
+            switch event.kind {
+            case .spaceCreated where !dinky_can_manage_spaces(): arrangeSoon()
+            case .spaceDestroyed where removed.remove(event.spaceID) == nil: arrangeSoon()
+            default: break
+            }
         }
     }
 
@@ -131,7 +136,8 @@ final class WorkspaceNumbers: WorkspaceNumbering {
             guard !displays.isEmpty else { break }
             let occupied = occupiedSpaces(among: displays.flatMap(\.spaces))
             let before = binding
-            let step = plan.step(displays, binding: binding, occupied: occupied, preserving: preservedSpaces(on: displays))
+            let step = plan.step(displays, binding: binding, occupied: occupied, preserving: preservedSpaces(on: displays),
+                                 manageSpaces: dinky_can_manage_spaces())
             binding = step.binding
             guard let action = step.action else {
                 completed = true
@@ -165,7 +171,8 @@ final class WorkspaceNumbers: WorkspaceNumbering {
         guard arrangementIsCurrent else { return }
         let plan = WorkspacePlan(AppState.shared.config)
         if AppState.shared.config.followSpaceOrder, !topologyPending { renumber(plan, on: displays) }
-        let step = plan.step(displays, binding: binding, occupied: occupiedSpaces(among: displays.flatMap(\.spaces)), preserving: preservedSpaces(on: displays))
+        let step = plan.step(displays, binding: binding, occupied: occupiedSpaces(among: displays.flatMap(\.spaces)),
+                             preserving: preservedSpaces(on: displays), manageSpaces: dinky_can_manage_spaces())
         binding = step.binding
         if case .move(let from, let to) = step.action, let n = binding.first(where: { $0.value == to })?.key {
             binding[n] = from

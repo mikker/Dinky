@@ -30,7 +30,7 @@ file is left alone, with the read error shown in the menu.
 | Key | Default | |
 |---|---|---|
 | `start-at-login` | `true` | Register as a login item. |
-| `workspaces` | `5` | Workspaces across all displays, one native Space each. dinky creates and removes Spaces to match. |
+| `workspaces` | `5` | Workspaces across all displays, one native Space each. On macOS 27+, dinky creates and removes Spaces to match. On macOS 26, manage desktops in Mission Control; see [desktop setup](#desktop-setup-on-macos-26). |
 | `follow-space-order` | `false` | Set `true` to renumber workspaces when you reorder Spaces in Mission Control: on each display the leftmost Space becomes its lowest-numbered workspace, and windows stay where they are. Left `false`, a workspace keeps its number, and the next arrangement (a config reload, a display change, a Space removed) moves its windows back to that number's place. |
 | `default-layout` | `'tiles'` | `'tiles'` (the existing dwindle layout), `'dwindle'`, `'accordion'`, `'fixed'`, `'scrolling'`, or `'master'`. |
 | `default-tiling` | `true` | Set `false` to leave workspaces untiled unless overridden. |
@@ -265,6 +265,34 @@ its own.
 
 </div>
 
+## Desktop setup on macOS 26
+
+dinky can number, switch and tile existing desktops on macOS 26, but cannot
+create or remove them automatically. The native lifecycle operations can leave
+WindowServer and Mission Control disagreeing about which desktops exist, so
+dinky does not call them on macOS versions before 27.
+
+Open Mission Control (Control–↑), move the pointer to the desktop strip at the
+top, and use **+** to add desktops. Create enough on each display for the
+workspaces assigned to it by `[workspace-to-display]`; unassigned workspaces
+need desktops on the main display. Full-screen apps do not count as desktops.
+`dinky doctor` reports how many are needed on each connected display.
+
+If there are too few desktops, the remaining workspaces have no Space and cannot
+be switched to. A workspace waiting to move to a display without a free desktop
+stays on its old Space. Adding a desktop in Mission Control lets dinky bind it
+automatically. Lowering `workspaces` leaves extra desktops untouched; remove them
+in Mission Control if you no longer want them.
+
+dinky explains this once at startup on macOS 26. You can reopen the explanation
+from **Desktop Setup…** in its menu. Missing workspaces also appear in that menu
+and add **!** to the workspace number. Automatic desktop management remains
+available on macOS 27 and later.
+
+If an earlier dinky version has already left unreachable desktops, quit dinky,
+restart the Dock once (`killall Dock`), and check the desktop strip in Mission
+Control before reopening dinky. dinky does not restart the Dock to manage desktops.
+
 ## `[workspace-to-display]`
 
 Which display a workspace lives on, by number from 1 to `workspaces`. A
@@ -282,8 +310,10 @@ wins and the other is ignored, with a warning.
 ```
 
 When a display comes or goes, dinky moves the workspace's windows, layout
-included, to a Space on its display and removes the Space left behind. Empty
-leftover Spaces are removed; ones with windows are left alone, unnumbered. A
+included, to a Space on its display. On macOS 27+, it removes the empty Space
+left behind and other empty leftover Spaces; ones with windows are left alone,
+unnumbered. On macOS 26, existing desktops are reused but never created or removed
+by dinky; [add enough desktops yourself](#desktop-setup-on-macos-26). A
 display with no workspaces keeps one unnumbered Space. Windows macOS piles onto
 another workspace when a display goes away, as around sleep, go back to their
 own workspace once the displays settle.
@@ -295,10 +325,11 @@ config reloads. Dinky captures the old workspace/Space/display identities before
 waiting for the new snapshot to settle. Chained callbacks share that original
 ownership snapshot rather than recapturing temporary hosts. Temporarily unlisted
 Spaces can still be preserved when they reappear on their old display. If macOS
-removes a Space itself, dinky creates or reuses a replacement for that workspace.
+removes a Space itself, dinky reuses a replacement for that workspace, or creates
+one on macOS 27+.
 Changing a workspace's display assignment still moves it. A later reorder of the
 display's existing Spaces restores the usual numeric-order policy
-(or renumbers them with `follow-space-order`). A visible leftover Space is removed
+(or renumbers them with `follow-space-order`). On macOS 27+, a visible leftover Space is removed
 only after WindowServer confirms a switch to another numbered Space; an unknown
 current Space, failed switch or timeout leaves it alone. While disabled, dinky
 also waits for transiently unlisted Spaces before numbering them without taking

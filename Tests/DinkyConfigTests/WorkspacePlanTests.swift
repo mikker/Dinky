@@ -11,9 +11,9 @@ struct WorkspacePlanTests {
         var actions: [PlanAction] = []
 
         /// Steps until the plan is done, applying each action as WindowServer would.
-        mutating func settle(_ plan: WorkspacePlan, limit: Int = 50, preserving: Set<UInt64> = []) {
+        mutating func settle(_ plan: WorkspacePlan, limit: Int = 50, preserving: Set<UInt64> = [], manageSpaces: Bool = true) {
             for _ in 0..<limit {
-                let step = plan.step(displays, binding: binding, occupied: Set(windows.filter { $0.value > 0 }.keys), preserving: preserving)
+                let step = plan.step(displays, binding: binding, occupied: Set(windows.filter { $0.value > 0 }.keys), preserving: preserving, manageSpaces: manageSpaces)
                 binding = step.binding
                 guard let action = step.action else { return }
                 actions.append(action)
@@ -43,6 +43,59 @@ struct WorkspacePlanTests {
     }
 
     private let fivePlusSide = WorkspacePlan(count: 5, assignments: [5: [.secondary]])
+
+    @Test func `Manual desktop management numbers available Spaces without creating or removing any`() {
+        var world = World(displays: [Self.display("L", "Built-in", main: true, count: 1, [1, 2, 3])])
+        world.settle(WorkspacePlan(count: 5, assignments: [:]), manageSpaces: false)
+        #expect(world.binding == [1: 1, 2: 2, 3: 3])
+        #expect(world.actions.isEmpty)
+
+        world.settle(WorkspacePlan(count: 2, assignments: [:]), manageSpaces: false)
+        #expect(world.binding == [1: 1, 2: 2])
+        #expect(world.spaces("L") == [1, 2, 3])
+        #expect(world.actions.isEmpty)
+    }
+
+    @Test func `Missing desktops on one display do not block numbering the next display`() {
+        var world = World(displays: [Self.display("L", "Built-in", main: true, count: 2, [1]),
+                                     Self.display("R", "External", main: false, count: 2, [4, 5])])
+        let plan = WorkspacePlan(count: 5, assignments: [4: [.secondary], 5: [.secondary]])
+        world.settle(plan, manageSpaces: false)
+        #expect(world.binding == [1: 1, 4: 4, 5: 5])
+        #expect(world.actions.isEmpty)
+
+        world.displays[0].spaces += [2, 3]
+        world.settle(plan, manageSpaces: false)
+        #expect(world.binding == [1: 1, 2: 2, 3: 3, 4: 4, 5: 5])
+        #expect(world.actions.isEmpty)
+    }
+
+    @Test func `Manual management still moves a workspace to an existing desktop on its assigned display`() {
+        var world = World(displays: [Self.display("L", "Built-in", main: true, count: 2, [1, 2]),
+                                     Self.display("R", "External", main: false, count: 2, [4])],
+                          windows: [2: 3], binding: [1: 1, 2: 2])
+        world.settle(WorkspacePlan(count: 2, assignments: [2: [.secondary]]), manageSpaces: false)
+        #expect(world.binding == [1: 1, 2: 4])
+        #expect(world.actions == [.move(from: 2, to: 4)])
+        #expect(world.windows[4] == 3)
+        #expect(world.spaces("L") == [1, 2])
+    }
+
+    @Test func `Manual management keeps a workspace on its old desktop until an empty destination exists`() {
+        var world = World(displays: [Self.display("L", "Built-in", main: true, count: 2, [1, 2]),
+                                     Self.display("R", "External", main: false, count: 2, [4])],
+                          windows: [2: 3, 4: 1], binding: [1: 1, 2: 2])
+        let plan = WorkspacePlan(count: 2, assignments: [2: [.secondary]])
+        world.settle(plan, manageSpaces: false)
+        #expect(world.binding == [1: 1, 2: 2])
+        #expect(world.actions.isEmpty)
+
+        world.displays[1].spaces.append(5)
+        world.settle(plan, manageSpaces: false)
+        #expect(world.binding == [1: 1, 2: 5])
+        #expect(world.actions == [.move(from: 2, to: 5)])
+        #expect(world.spaces("R") == [4, 5])
+    }
 
     @Test func `Startup binds workspaces to Spaces in order`() {
         var world = World(displays: [Self.display("L", "Built-in", main: true, count: 1, [1, 2, 3])])

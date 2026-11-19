@@ -123,8 +123,10 @@ defaults write com.apple.dock workspaces-auto-swoosh -bool true && killall Dock
 - Multi-display docking is tested with virtual displays; physical docking
   coverage is limited. Switching a display the pointer is not on may flicker
   the pointer.
-- dinky creates and removes Spaces to keep one per workspace, but leaves a
-  leftover Space with windows alone.
+- On macOS 26, [create and remove desktops in Mission Control](configuration.md#desktop-setup-on-macos-26).
+  dinky numbers, switches and tiles existing desktops, but does not create or
+  remove them. Automatic desktop management requires macOS 27 or later; there,
+  dinky keeps one Space per workspace and leaves leftovers with windows alone.
 - Apps refuse some sizes (Safari's minimum width, Terminal's grid). dinky lays
   out around them, but tiles can overlap or leave gaps. A window has a minimum
   size once it comes back at the same size for two different sizes asked, so

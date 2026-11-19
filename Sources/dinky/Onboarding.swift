@@ -1,10 +1,13 @@
 import AppKit
+import DinkyPrivate
 import ServiceManagement
 
 // First-run flow. Step 1 waits for Accessibility, which dinky needs to move windows and to install its
-// event tap. Step 2, shown once, offers to turn off macOS's own "switch to a Space with open windows".
+// event tap. Then, each shown once, offers to turn off macOS's own "switch to a Space with open windows"
+// and explains manual desktop setup on systems without automatic Space lifecycle support.
 final class Onboarding: NSObject {
     private static let swooshAskedKey = "onboarding-asked-auto-swoosh"
+    private static let manualSpacesExplainedKey = "onboarding-explained-manual-spaces"
     private var window: NSWindow?
     private var timer: Timer?
     private var onTrusted: () -> Void = {}
@@ -21,7 +24,7 @@ final class Onboarding: NSObject {
 
     private func trusted() {
         onTrusted()
-        if shouldAskAboutSwoosh() { showSwooshStep() } else { close() }
+        if shouldAskAboutSwoosh() { showSwooshStep() } else { finish() }
     }
 
     // MARK: Step 1, Accessibility
@@ -65,7 +68,38 @@ final class Onboarding: NSObject {
 
     @objc private func leaveSwoosh() {
         UserDefaults.standard.set(true, forKey: Onboarding.swooshAskedKey)
+        finish()
+    }
+
+    // MARK: Manual desktop setup
+
+    private func finish() {
+        if !dinky_can_manage_spaces(), !UserDefaults.standard.bool(forKey: Onboarding.manualSpacesExplainedKey) {
+            showSpaceManagementStep()
+        } else {
+            close()
+        }
+    }
+
+    /// Also available from the menu after the first-run explanation has been dismissed.
+    func showSpaceManagementStep() {
+        let major = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        show(title: "Set up desktops in Mission Control",
+             text: "On macOS \(major), dinky uses existing desktops instead of creating or removing them. "
+                 + "Press Control–↑ and add enough on each display to match your workspace configuration.",
+             buttons: [button("Got It", #selector(acknowledgeManualSpaces)),
+                       button("Open Mission Control", #selector(openMissionControl))])
+        // Closing the window with its title-bar button also counts as having seen the explanation.
+        UserDefaults.standard.set(true, forKey: Onboarding.manualSpacesExplainedKey)
+    }
+
+    @objc private func acknowledgeManualSpaces() {
         close()
+    }
+
+    @objc private func openMissionControl() {
+        acknowledgeManualSpaces()
+        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Mission Control.app"))
     }
 
     private func shell(_ path: String, _ args: String...) {
