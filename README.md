@@ -19,6 +19,7 @@ Open dinky and grant Accessibility when asked. Windows tile as they open.
 - `dinky workspace 3`: Switch to workspace 3.
 - `dinky layout accordion`: Stack the focused container.
 - `dinky doctor`: Check the config, the macOS settings dinky needs, and that no other tiler is running.
+- `dinky skill`: Print a guide for coding agents. Copy [`skills/dinky`](skills/dinky) into your agent's skills folder to use it.
 
 **macOS 26:** Create and remove desktops in Mission Control (Control–↑). dinky
 numbers, switches and tiles existing desktops, but automatic desktop creation

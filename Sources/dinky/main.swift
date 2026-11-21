@@ -36,6 +36,7 @@ case "app": exit(runApp())
 case "recover": exit(runRecover())
 case "debug": exit(runDebug(rest))
 case "doctor": exit(runDoctor(rest))
+case "skill": exit(runSkill())
 case "help", "--help", "-h": exit(runHelp())
 case "version", "--version", "-v":
     let info = Bundle.main.infoDictionary
