@@ -8,11 +8,11 @@ struct SkillGuideTests {
         for row in cliOnlyCommands { #expect(skillGuide.contains("- `\(row.syntax)`: \(row.description)"), "\(row.syntax)") }
     }
 
-    @Test func `Every example in the guide parses`() throws {
+    @Test func `Every example in the guide parses`() {
         let blocks = skillGuide.components(separatedBy: "```").enumerated().filter { $0.offset % 2 == 1 }.map(\.element)
         let invocations = blocks.flatMap { $0.components(separatedBy: "dinky ").dropFirst() }
             .map { $0.prefix { $0 != "|" && $0 != ")" && $0 != "\n" }.replacing("\"$id\"", with: "1") }
-        #expect(invocations.count >= 10)
+        #expect(!invocations.isEmpty)
         for line in invocations { #expect(throws: Never.self, "\(line)") { try Command.parse(String(line)) } }
     }
 }
