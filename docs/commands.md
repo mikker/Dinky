@@ -91,6 +91,7 @@ CLI-only commands:
 | `doctor [--config <path>]` | Check the config and macOS settings, and that no other tiling window manager is running. |
 | `recover` | Ask the running app to restore windows a crashed session left tiled. |
 | `debug events\|windows` | Print window events or windows, without the app. |
+| `skill` | Print the guide for coding agents. See [Agents](#agents). |
 | `version`, `-v`, `--version` | Print the version and build number. |
 
 The log is `~/Library/Logs/dinky.log`; attach it to bug reports.
@@ -119,6 +120,14 @@ The CLI also rejects replies over 1 MiB (including the status header), invalid
 UTF-8 replies and transport failures rather than printing partial output. The
 command may already have run when receiving its reply fails. Narrow large list
 queries with filters or `--format`, or use a raw socket client for larger replies.
+
+## Agents
+
+`dinky skill` prints a guide for coding agents, including the commands of the
+installed version. To give an agent a skill that reads it, copy
+[`skills/dinky`](https://github.com/mikker/Dinky/tree/main/skills/dinky) into
+its skills folder, such as `~/.claude/skills/dinky` for Claude Code. The skill
+only points the agent to `dinky skill`, so it stays current as dinky updates.
 
 ## Recovery
 
