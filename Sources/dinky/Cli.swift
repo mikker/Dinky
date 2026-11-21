@@ -23,18 +23,20 @@ func sendAndPrint(_ line: String) -> Int32 {
     return reply.ok ? 0 : 1
 }
 
+let cliOnlyCommands = [
+    (syntax: "app", description: "Run the app in the foreground, logging to the terminal."),
+    (syntax: "recover", description: "Ask the running app to restore windows a crashed session left tiled."),
+    (syntax: "debug events|windows", description: "Print the live window event stream, or the current windows, for bug reports."),
+    (syntax: "doctor [--config <path>]", description: "Check the config and the macOS settings dinky depends on. Exit 1 on errors."),
+    (syntax: "skill", description: "Print the guide for coding agents that the dinky skill points to."),
+    (syntax: "version, -v, --version", description: "Print the version and build number."),
+]
+
 // `dinky help`: the command reference, then the subcommands main.swift handles itself.
 func runHelp() -> Int32 {
-    let cliOnly = [
-        ("app", "Run the app in the foreground, logging to the terminal."),
-        ("recover", "Ask the running app to restore windows a crashed session left tiled."),
-        ("debug events|windows", "Print the live window event stream, or the current windows, for bug reports."),
-        ("doctor [--config <path>]", "Check the config and the macOS settings dinky depends on. Exit 1 on errors."),
-        ("version, -v, --version", "Print the version and build number."),
-    ]
     print("usage: dinky <command>, sent to the running app over \(socketPath)\n")
     for doc in Command.all { print("  \(doc.syntax)\n      \(doc.description)") }
     print("\ncommand line only:")
-    for (syntax, description) in cliOnly { print("  \(syntax)\n      \(description)") }
+    for (syntax, description) in cliOnlyCommands { print("  \(syntax)\n      \(description)") }
     return 0
 }
