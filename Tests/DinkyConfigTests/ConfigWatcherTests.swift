@@ -28,6 +28,26 @@ struct ConfigWatcherTests {
         #expect(broken.wait(timeout: .now() + 1) == .success, "error reported")
     }
 
+    @Test func `Fires when the config's directory is trashed and replaced by a symlink`() throws {
+        let tmp = FileManager.default.temporaryDirectory
+        let dir = tmp.appending(path: "dinky-\(UUID().uuidString)")
+        let trashed = dir.appendingPathExtension("trashed"), dotfiles = dir.appendingPathExtension("dotfiles")
+        defer { for each in [dir, trashed, dotfiles] { try? FileManager.default.removeItem(at: each) } }
+        for each in [dir, dotfiles] { try FileManager.default.createDirectory(at: each, withIntermediateDirectories: true) }
+        let url = dir.appending(path: "dinky.toml")
+        try "workspaces = 3\n".write(to: url, atomically: false, encoding: .utf8)
+        try "workspaces = 3\n".write(to: dotfiles.appending(path: "dinky.toml"), atomically: false, encoding: .utf8)
+        let seen = DispatchSemaphore(value: 0)
+        let watcher = watch(url, workspaces: 4, seen)
+        defer { watcher.stop() }
+        try FileManager.default.moveItem(at: dir, to: trashed)
+        Thread.sleep(forTimeInterval: 0.3)
+        try FileManager.default.createSymbolicLink(at: dir, withDestinationURL: dotfiles)
+        Thread.sleep(forTimeInterval: 0.6)
+        try "workspaces = 4\n".write(to: url, atomically: true, encoding: .utf8)
+        #expect(seen.wait(timeout: .now() + 1) == .success)
+    }
+
     @Test func `A stopped watcher stays stopped while its file is missing`() throws {
         let url = FileManager.default.temporaryDirectory.appending(path: "dinky-\(UUID().uuidString).toml")
         defer { try? FileManager.default.removeItem(at: url) }
