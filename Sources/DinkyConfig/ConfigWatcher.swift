@@ -10,6 +10,9 @@ import Foundation
 /// The file descriptor follows a symlink to its target, so replacing the link itself (`ln -sf`, or a file
 /// renamed over it) changes nothing it sees. The link's directory is watched too, and a change there reloads
 /// when the config's own entry is a different one than at the last load.
+///
+/// Moving the directory itself, as trashing it to put a symlink into a dotfiles checkout in its place does, sends
+/// the file nothing. So the directory's own move or deletion reloads too, which watches whatever is at the path now.
 public final class ConfigWatcher {
     private let url: URL
     private let onChange: (Result<Config, ConfigError>) -> Void
@@ -62,11 +65,18 @@ public final class ConfigWatcher {
     private func watchDirectory() {
         let fd = open(url.deletingLastPathComponent().path, O_EVTONLY)
         guard fd >= 0 else { return }
-        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: queue)
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: [.write, .delete, .rename], queue: queue
+        )
         // Any file coming or going in the directory lands here; only a new entry at the config path counts. It is
         // noted at once, so the neighbours' events that follow don't push the debounced reload back again and again.
         source.setEventHandler { [weak self] in
-            guard let self else { return }
+            guard let self, let directory else { return }
+            if !directory.data.isDisjoint(with: [.delete, .rename]) {
+                directory.cancel()
+                self.directory = nil
+                return changed()
+            }
             let now = Entry(url)
             guard now != entry else { return }
             entry = now
