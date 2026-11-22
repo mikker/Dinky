@@ -6,6 +6,10 @@
 
 - `dinky skill` prints a guide for coding agents, with a command reference generated from the installed version. Copy `skills/dinky` into your agent's skills folder to have it read the guide.
 
+### Fixes
+
+- The config reloads again after its folder is moved away, such as to the Trash when it is replaced by a symlink into a dotfiles checkout. Until now dinky kept watching the moved folder until it restarted.
+
 ## 0.30
 
 **macOS 26 and earlier:** Add enough desktops in Mission Control (Control–↑) on each display for your configured workspaces. dinky still numbers, switches and tiles existing desktops, but automatic desktop creation and removal now require macOS 27 or later.
