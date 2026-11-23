@@ -31,13 +31,16 @@ struct WindowTrackingTests {
         let displays = DisplayModel(readSnapshot: { [display] })
         displays.reconcile()
         let support = FileManager.default.temporaryDirectory.appendingPathComponent("dinky-tracking-\(UUID())")
-        let owner = Coordinator(displays: displays, config: Config(), applier: FrameApplier(supportURL: support))
-        let window = Window(identity: .init(id: 900_079, pid: -1, firstSeen: .distantPast),
+        var window = Window(identity: .init(id: 900_079, pid: -1, firstSeen: .distantPast),
                             appName: "Editor", bundleID: "com.example.editor", spaceID: space,
                             isOrderedIn: true, isDocument: true, isVisible: true)
         var workspace = Workspace(bounds: bounds)
         workspace.insert(window.id)
         workspace.insert(sibling)
+        workspace.focus(window.id)
+        window.frame = workspace.layout().frames[window.id]!
+        let owner = Coordinator(displays: displays, config: Config(), applier: FrameApplier(supportURL: support),
+                                model: WindowModel(windows: [window]))
         owner.workspaces[space] = workspace
         owner.placements[window.id] = Placement(floating: false, space: space)
         owner.placements[sibling] = Placement(floating: false, space: space)
@@ -78,18 +81,45 @@ struct WindowTrackingTests {
         #expect(Set(owner.workspaces[10]?.windows ?? []) == [window.id, sibling])
     }
 
-    @Test func nativeTabTakesOverBeforeTheOldTileIsReleased() {
+    private func inactiveTab(_ window: Window) -> Window {
+        var hidden = window
+        hidden.spaceID = 0
+        hidden.isVisible = false
+        hidden.isOrderedIn = false
+        hidden.isMinimized = true
+        return hidden
+    }
+
+    @MainActor @Test(arguments: [true, false])
+    func newTabKeepsTheLeftTile(oldTabHiddenFirst: Bool) throws {
         let (owner, original) = fixture()
-        let newcomer: UInt32 = 900_080
-        owner.placements[newcomer] = Placement(floating: false, space: nil)
-        owner.heldTabs[newcomer] = original.id
-        var window = original
-        window.isOrderedIn = false
-        owner.track(window)
-        #expect(owner.workspaces[10]?.windows == [newcomer, sibling])
+        let right = try #require(owner.workspaces[10]?.layout().frames[sibling])
+        let newcomer = Window(identity: .init(id: 900_080, pid: original.pid, firstSeen: Date()),
+                              appName: original.appName, bundleID: original.bundleID, frame: original.frame,
+                              spaceID: 10, isOrderedIn: true, isDocument: true, isVisible: true)
+        owner.placements[newcomer.id] = Placement(floating: false, space: nil)
+        let hidden = inactiveTab(original)
+
+        for window in oldTabHiddenFirst ? [hidden, newcomer] : [newcomer, hidden] {
+            owner.track(window)
+            #expect(owner.workspaces[10]?.layout().frames[sibling] == right)
+        }
+        #expect(owner.workspaces[10]?.layout().frames[newcomer.id] == original.frame)
+        #expect(owner.workspaces[10]?.focused == newcomer.id)
         #expect(owner.placements[original.id]?.space == nil)
-        #expect(owner.placements[newcomer]?.space == 10)
+        #expect(owner.placements[newcomer.id]?.space == 10)
         #expect(owner.heldTabs.isEmpty)
+    }
+
+    @MainActor @Test func hiddenTabWithoutAReplacementReleasesItsTile() async throws {
+        let (owner, original) = fixture()
+        owner.track(inactiveTab(original))
+        let release = try #require(owner.departingTabs[original.id])
+        await withCheckedContinuation { continuation in
+            release.notify(queue: .main) { continuation.resume() }
+        }
+        #expect(owner.placements[original.id]?.space == nil)
+        #expect(owner.workspaces[10]?.windows == [sibling])
     }
 
     @Test func aFloatingWindowNeverAcquiresATile() {

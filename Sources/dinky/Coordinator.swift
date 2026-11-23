@@ -50,6 +50,8 @@ final class Coordinator {
     /// Newly shown windows at the exact frame of a tile of their app, held out of the trees for a moment in case
     /// they are a tab switch: by newcomer, the tile's window. See Tabs.swift.
     var heldTabs: [WindowID: WindowID] = [:]
+    /// An inactive native tab can lose its Space just before its replacement is reported.
+    var departingTabs: [WindowID: DispatchWorkItem] = [:]
     /// Newcomers held once and not confirmed as tabs. They are tiled like any window from then on.
     var notTabs: Set<WindowID> = []
     /// New windows not yet classified, and the display that had focus when they first showed. See Adoption.swift.
@@ -392,10 +394,14 @@ final class Coordinator {
         }
         guard !adopting.contains(window.id), !placements[window.id]!.floating else { return }
         let old = placements[window.id]!.space
-        if let old, window.isMinimized || !window.isOrderedIn, takeOverTile(of: window.id, in: old) {
-            placements[window.id]!.space = nil
-            return
+        if let old, window.isMinimized || !window.isOrderedIn {
+            if takeOverTile(of: window.id, in: old) { return }
+            if window.spaceID == 0, window.isMinimized, !window.isOrderedIn {
+                holdDepartingTab(window.id)
+                return
+            }
         }
+        departingTabs.removeValue(forKey: window.id)?.cancel()
         let new = window.isNormal ? key(of: window) : nil
         guard old != new, heldTabs[window.id] == nil else { return }
         if let old { edit(old) { $0.remove(window.id) } }
@@ -413,6 +419,7 @@ final class Coordinator {
         applier.forget(id)
         animator.forget(id)
         frameRecovery[id] = nil
+        departingTabs.removeValue(forKey: id)?.cancel()
         heldTabs[id] = nil
         notTabs.remove(id)
         minimizedIDs.remove(id)
@@ -507,7 +514,7 @@ final class Coordinator {
         clearRefocus()
         let id = request.leaving.id, space = request.leaving.space
         guard dragging == nil, !CGEventSource.buttonState(.combinedSessionState, button: .left),
-              let successor = workspaces[space]?.focused, successor != id else { return }
+              let successor = workspaces[space]?.focused, successor != id || departingTabs[id] != nil else { return }
         refocus = request
         let check = DispatchWorkItem { [weak self] in
             guard let self, refocus == request else { return }
@@ -525,7 +532,11 @@ final class Coordinator {
             focus(target)
         }
         refocusCheck = check
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(150), execute: check)
+        if let release = departingTabs[id] {
+            release.notify(queue: .main, execute: check)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(150), execute: check)
+        }
     }
 
     /// The tree of a user Space, numbered workspace or not, created on first use. Nil for full-screen Spaces.
