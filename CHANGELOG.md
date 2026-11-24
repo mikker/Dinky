@@ -8,7 +8,7 @@
 
 ### Fixes
 
-- The config reloads again after its folder is moved away, such as to the Trash when it is replaced by a symlink into a dotfiles checkout. Until now dinky kept watching the moved folder until it restarted.
+- Config reloads follow directory moves and symlink retargets anywhere along the config path, including chained dotfiles links (#91, thanks @sndrgrdn).
 
 ## 0.30
 

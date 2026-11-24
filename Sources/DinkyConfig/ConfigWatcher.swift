@@ -1,98 +1,121 @@
 import Foundation
 
-/// Watches a config file and reloads it when it changes, debounced. Each reload calls `onChange`
-/// on the main queue with the new config or the error; the caller keeps the previous config on error.
-///
-/// Editors often save by writing a new file and renaming it over the old one, which leaves the
-/// watched descriptor pointing at a deleted file. So after every change the file is reopened,
-/// and while it is missing it is polled until it comes back.
-///
-/// The file descriptor follows a symlink to its target, so replacing the link itself (`ln -sf`, or a file
-/// renamed over it) changes nothing it sees. The link's directory is watched too, and a change there reloads
-/// when the config's own entry is a different one than at the last load.
-///
-/// Moving the directory itself, as trashing it to put a symlink into a dotfiles checkout in its place does, sends
-/// the file nothing. So the directory's own move or deletion reloads too, which watches whatever is at the path now.
+/// Reloads the config selected by a pathname, including changes to any symlink or ancestor along that path.
+/// File events cover in-place writes; directory events cover changes to the entries used to reach the file.
+/// Rebinding and loading share one debounced transition. Unavailable observations are retried until restored.
+/// Results arrive on the main queue; the caller keeps the previous config on error.
 public final class ConfigWatcher {
     private let url: URL
     private let onChange: (Result<Config, ConfigError>) -> Void
+    private let openObservation: (String) -> Int32
     private let queue = DispatchQueue(label: "dinky.config-watcher")
-    private var source: DispatchSourceFileSystemObject?
-    private var directory: DispatchSourceFileSystemObject?
-    /// The config path's own entry (not a symlink's target) when it was last opened; nil while missing.
-    private var entry: Entry?
-    /// The debounced reload, or the next poll for a missing file; a change or `stop()` cancels either.
+    private var sources: [DispatchSourceFileSystemObject] = []
+    private var snapshot: ConfigPath?
+    private var generation = 0
+    /// The debounced reload, or the next retry while a path or observation is unavailable.
     private var pending: DispatchWorkItem?
 
-    public init(url: URL, onChange: @escaping (Result<Config, ConfigError>) -> Void) {
+    public convenience init(url: URL, onChange: @escaping (Result<Config, ConfigError>) -> Void) {
+        self.init(url: url, openObservation: { open($0, O_EVTONLY) }, onChange: onChange)
+    }
+
+    init(url: URL, openObservation: @escaping (String) -> Int32, onChange: @escaping (Result<Config, ConfigError>) -> Void) {
         self.url = url
         self.onChange = onChange
-        queue.sync { watch() }
+        self.openObservation = openObservation
+        queue.sync { _ = watch() }
     }
 
     deinit {
-        source?.cancel()
-        directory?.cancel()
+        for source in sources { source.cancel() }
         pending?.cancel()
     }
 
     public func stop() {
         queue.sync {
-            source?.cancel()
-            source = nil
-            directory?.cancel()
-            directory = nil
+            generation += 1
+            for source in sources { source.cancel() }
+            sources.removeAll()
             pending?.cancel()
+            pending = nil
         }
     }
 
-    private func watch() {
-        source?.cancel()
-        source = nil
-        entry = Entry(url)
-        if directory == nil { watchDirectory() }
-        let fd = open(url.path, O_EVTONLY)
-        guard fd >= 0 else { return schedule(after: 0.5) { $0.reopenIfMissing() } }
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd, eventMask: [.write, .extend, .delete, .rename], queue: queue
-        )
-        source.setEventHandler { [weak self] in self?.changed() }
-        source.setCancelHandler { close(fd) }
-        source.resume()
-        self.source = source
-    }
+    @discardableResult
+    private func watch() -> Bool {
+        let next = generation + 1
+        let resolved = ConfigPath(url)
+        var replacements: [DispatchSourceFileSystemObject] = []
+        var directories: Set<FileIdentity> = []
+        var complete = true
 
-    private func watchDirectory() {
-        let fd = open(url.deletingLastPathComponent().path, O_EVTONLY)
-        guard fd >= 0 else { return }
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd, eventMask: [.write, .delete, .rename], queue: queue
-        )
-        // Any file coming or going in the directory lands here; only a new entry at the config path counts. It is
-        // noted at once, so the neighbours' events that follow don't push the debounced reload back again and again.
-        source.setEventHandler { [weak self] in
-            guard let self, let directory else { return }
-            if !directory.data.isDisjoint(with: [.delete, .rename]) {
-                directory.cancel()
-                self.directory = nil
-                return changed()
+        for (directory, identity) in resolved.directories.sorted(by: { $0.key < $1.key }) {
+            guard !directories.contains(identity) else { continue }
+            if let source = observe(directory, identity: identity, generation: next, file: false) {
+                replacements.append(source)
+                directories.insert(identity)
+            } else {
+                complete = false
             }
-            let now = Entry(url)
-            guard now != entry else { return }
-            entry = now
-            changed()
+        }
+        if let identity = resolved.file,
+           let source = observe(url.path, identity: identity, generation: next, file: true) {
+            replacements.append(source)
+        } else {
+            complete = false
+        }
+
+        // Install the new generation before retiring the old one. Queued old events cannot affect it.
+        let retired = sources
+        sources = replacements
+        snapshot = resolved
+        generation = next
+        for source in retired { source.cancel() }
+
+        if !complete { schedule(after: 0.5) { $0.retry() } }
+        // A component can change between resolution and opening its descriptor.
+        namespaceChanged()
+        return complete
+    }
+
+    private func observe(_ name: String, identity: FileIdentity, generation: Int, file: Bool) -> DispatchSourceFileSystemObject? {
+        let fd = openObservation(name)
+        guard fd >= 0 else { return nil }
+        var info = stat()
+        guard fstat(fd, &info) == 0, FileIdentity(info) == identity else {
+            close(fd)
+            return nil
+        }
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: [.write, .extend, .attrib, .delete, .rename, .revoke], queue: queue
+        )
+        source.setEventHandler { [weak self] in
+            guard let self, self.generation == generation else { return }
+            if file { fileChanged(identity) }
+            else { namespaceChanged() }
         }
         source.setCancelHandler { close(fd) }
         source.resume()
-        directory = source
+        return source
     }
 
-    private func reopenIfMissing() {
-        if FileManager.default.fileExists(atPath: url.path) {
-            changed()
-        } else {
-            watch()
-        }
+    private func namespaceChanged() {
+        let now = ConfigPath(url)
+        guard now != snapshot else { return }
+        // Record identity immediately: unrelated directory events must not extend the debounce.
+        snapshot = now
+        changed()
+    }
+
+    private func fileChanged(_ identity: FileIdentity) {
+        // An old target may still be open during the debounce after a link changes. Its writes don't count.
+        guard FileIdentity.read(url.path) == identity else { return namespaceChanged() }
+        changed()
+    }
+
+    private func retry() {
+        // Identity alone cannot tell us what was written while observation was unavailable.
+        if watch() { changed() }
     }
 
     private func changed() {
@@ -113,15 +136,67 @@ public final class ConfigWatcher {
     }
 }
 
-/// A directory entry by device and inode, read without following a symlink.
-private struct Entry: Equatable {
+/// Namespace dependencies, not directory timestamps: a neighbor changing is not a config change.
+/// Keep intermediate symlinks too; resolving the whole URL at once would discard their parent entries.
+private struct ConfigPath: Equatable {
+    let entries: [String: FileIdentity]
+    let directories: [String: FileIdentity]
+    let file: FileIdentity?
+
+    init(_ url: URL) {
+        var entries: [String: FileIdentity] = [:]
+        var directories: [String: FileIdentity] = [:]
+        if let root = FileIdentity.read("/") {
+            entries["/"] = root
+            directories["/"] = root
+        }
+        var remaining = url.path.split(separator: "/").reversed().map(String.init)
+        var directory = "/"
+        var links = 0
+        while let component = remaining.popLast() {
+            if component == "." { continue }
+            if component == ".." {
+                directory = (directory as NSString).deletingLastPathComponent
+                if directory.isEmpty { directory = "/" }
+                continue
+            }
+            let name = (directory == "/" ? "" : directory) + "/" + component
+            var info = stat()
+            guard lstat(name, &info) == 0 else { break }
+            let identity = FileIdentity(info)
+            entries[name] = identity
+            if info.st_mode & S_IFMT == S_IFLNK {
+                // Bound expansion even for a broken loop. Its discovered parent entries remain watched.
+                links += 1
+                guard links <= MAXSYMLINKS,
+                      let target = try? FileManager.default.destinationOfSymbolicLink(atPath: name) else { break }
+                if target.hasPrefix("/") { directory = "/" }
+                remaining.append(contentsOf: target.split(separator: "/").reversed().map(String.init))
+            } else if info.st_mode & S_IFMT == S_IFDIR {
+                directory = name
+                directories[name] = identity
+            } else {
+                break
+            }
+        }
+        self.entries = entries
+        self.directories = directories
+        file = FileIdentity.read(url.path)
+    }
+}
+
+private struct FileIdentity: Hashable {
     let device: dev_t
     let inode: ino_t
 
-    init?(_ url: URL) {
-        var info = stat()
-        guard lstat(url.path, &info) == 0 else { return nil }
+    init(_ info: stat) {
         device = info.st_dev
         inode = info.st_ino
+    }
+
+    static func read(_ name: String) -> FileIdentity? {
+        var info = stat()
+        guard stat(name, &info) == 0 else { return nil }
+        return FileIdentity(info)
     }
 }
