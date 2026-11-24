@@ -1,10 +1,10 @@
 ---
 name: dinky
-description: Use the dinky CLI to switch workspaces, focus, move and lay out windows, list windows and workspaces, and check the config of the dinky tiling window manager on macOS.
+description: Use the dinky CLI to inspect, move and arrange macOS windows and workspaces, or check dinky's configuration.
 ---
 
-Run `dinky skill` and follow the guide it prints. The guide comes from the
-installed dinky, so it describes the commands available in that version.
+Run `dinky skill` and follow the guide it prints. The installed binary supplies
+the current commands and guidance.
 
-If the command fails, the installed dinky predates the guide. Run `dinky help`
-instead.
+If `skill` is an unknown command, use `dinky help` for that older version.
+If `dinky` is unavailable, report it rather than installing or starting it.
