@@ -4,11 +4,12 @@
 
 ### Agents
 
-- `dinky skill` prints a guide for coding agents, with a command reference generated from the installed version. Copy `skills/dinky` into your agent's skills folder to have it read the guide.
+- `dinky skill` prints a guide for coding agents, with a command reference generated from the installed version (#90, thanks @sndrgrdn). Copy `skills/dinky` into your agent's skills folder to have it read the guide.
 
 ### Fixes
 
 - Config reloads follow directory moves and symlink retargets anywhere along the config path, including chained dotfiles links (#91, thanks @sndrgrdn).
+- Native tab switches preserve the original tile when the previous tab hides first, keeping neighboring tiles in place (#92, thanks @ykisana).
 
 ## 0.30
 

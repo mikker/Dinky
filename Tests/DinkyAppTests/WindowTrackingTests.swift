@@ -131,4 +131,161 @@ struct WindowTrackingTests {
         #expect(owner.placements[window.id]?.floating == true)
         #expect(owner.placements[window.id]?.space == nil)
     }
+
+    private func waitForRelease(_ release: DispatchWorkItem) async {
+        await withCheckedContinuation { continuation in
+            release.notify(queue: .main) { continuation.resume() }
+        }
+    }
+
+    @MainActor @Test func returningOldTabCancelsRemovalAndStillNotifies() async throws {
+        let (owner, original) = fixture()
+        owner.track(inactiveTab(original))
+        let release = try #require(owner.departingTabs[original.id])
+        owner.track(original)
+        #expect(release.isCancelled)
+        await waitForRelease(release)
+        #expect(owner.departingTabs.isEmpty)
+        #expect(owner.placements[original.id]?.space == 10)
+        #expect(owner.workspaces[10]?.windows == [original.id, sibling])
+    }
+
+    @MainActor @Test func replacementSurvivesCanceledDeparture() async throws {
+        let (owner, original) = fixture()
+        owner.track(inactiveTab(original))
+        let release = try #require(owner.departingTabs[original.id])
+        let next = Window(identity: .init(id: 900_080, pid: original.pid, firstSeen: Date()),
+                          appName: original.appName, bundleID: original.bundleID,
+                          frame: original.frame, spaceID: 10,
+                          isOrderedIn: true, isDocument: true, isVisible: true)
+        owner.placements[next.id] = Placement(floating: false, space: nil)
+        // Previously independent windows can become native tabs too.
+        owner.notTabs.insert(next.id)
+        owner.track(next)
+        await waitForRelease(release)
+        #expect(release.isCancelled)
+        #expect(owner.placements[next.id]?.space == 10)
+        #expect(owner.workspaces[10]?.windows == [next.id, sibling])
+    }
+
+    @MainActor @Test func secondDepartureOwnsItsTimer() async throws {
+        let (owner, original) = fixture()
+        owner.track(inactiveTab(original))
+        let first = try #require(owner.departingTabs[original.id])
+        owner.track(original)
+        owner.track(inactiveTab(original))
+        let second = try #require(owner.departingTabs[original.id])
+        #expect(first !== second)
+        await waitForRelease(first)
+        await waitForRelease(second)
+        #expect(owner.departingTabs.isEmpty)
+        #expect(owner.placements[original.id]?.space == nil)
+        #expect(owner.workspaces[10]?.windows == [sibling])
+    }
+
+    @MainActor @Test func destroyedWindowIDReuseSurvivesOldTimer() async throws {
+        let (owner, original) = fixture()
+        owner.track(inactiveTab(original))
+        let release = try #require(owner.departingTabs[original.id])
+        owner.forget(original.id)
+        owner.placements[original.id] = Placement(floating: false, space: nil)
+        owner.track(original)
+        await waitForRelease(release)
+        #expect(owner.placements[original.id]?.space == 10)
+        #expect(Set(owner.workspaces[10]?.windows ?? []) == [original.id, sibling])
+    }
+
+    @MainActor @Test func moveToAnotherSpaceCancelsOldRemoval() async throws {
+        let (owner, original) = fixture()
+        owner.track(inactiveTab(original))
+        let release = try #require(owner.departingTabs[original.id])
+        var moved = original
+        moved.spaceID = 20
+        owner.track(moved)
+        await waitForRelease(release)
+        #expect(owner.placements[original.id]?.space == 20)
+        #expect(owner.workspaces[20]?.windows == [original.id])
+        #expect(owner.workspaces[10]?.windows == [sibling])
+    }
+
+    @MainActor @Test func floatAndRetileCancelsOldRemoval() async throws {
+        let (owner, original) = fixture()
+        owner.track(inactiveTab(original))
+        let release = try #require(owner.departingTabs[original.id])
+        #expect(owner.setFloating(original.id, true))
+        #expect(owner.setFloating(original.id, false))
+        await waitForRelease(release)
+        #expect(owner.placements[original.id]?.space == 10)
+        #expect(Set(owner.workspaces[10]?.windows ?? []) == [original.id, sibling])
+    }
+
+    @MainActor @Test func ordinaryMinimizeWithSpaceReleasesImmediately() {
+        let (owner, original) = fixture()
+        var minimized = inactiveTab(original)
+        minimized.spaceID = 10
+        owner.track(minimized)
+        #expect(owner.departingTabs.isEmpty)
+        #expect(owner.placements[original.id]?.space == nil)
+        #expect(owner.workspaces[10]?.windows == [sibling])
+    }
+
+    @MainActor @Test func oldOrderedOutWithoutMinimizeStillAcceptsHeldNewcomer() {
+        let (owner, original) = fixture()
+        let next: UInt32 = 900_080
+        owner.placements[next] = Placement(floating: false, space: nil)
+        owner.heldTabs[next] = original.id
+        var hidden = original
+        hidden.isOrderedIn = false
+        owner.track(hidden)
+        #expect(owner.placements[original.id]?.space == nil)
+        #expect(owner.placements[next]?.space == 10)
+        #expect(owner.workspaces[10]?.windows == [next, sibling])
+    }
+
+    @MainActor @Test func repeatedHiddenEventsDoNotExtendDeadline() async throws {
+        let (owner, original) = fixture()
+        owner.track(inactiveTab(original))
+        let release = try #require(owner.departingTabs[original.id])
+        for _ in 0..<20 { owner.track(inactiveTab(original)) }
+        #expect(owner.departingTabs[original.id] === release)
+        await waitForRelease(release)
+        #expect(owner.workspaces[10]?.windows == [sibling])
+    }
+
+    @MainActor @Test func disabledCoordinatorStillCleansModel() async throws {
+        let (owner, original) = fixture()
+        owner.track(inactiveTab(original))
+        let release = try #require(owner.departingTabs[original.id])
+        owner.enabled = false
+        await waitForRelease(release)
+        #expect(!owner.enabled)
+        #expect(owner.departingTabs.isEmpty)
+        #expect(owner.placements[original.id]?.space == nil)
+        #expect(owner.workspaces[10]?.windows == [sibling])
+    }
+
+    @MainActor @Test func configReloadWithReturnedWindowCancelsTimer() async throws {
+        let (owner, original) = fixture()
+        owner.track(inactiveTab(original))
+        let release = try #require(owner.departingTabs[original.id])
+        var config = Config()
+        config.borders.enabled = false
+        config.workspaces += 1 // A window-affecting reload, not the decoration-only fast path.
+        #expect(owner.update(config: config))
+        await waitForRelease(release)
+        #expect(release.isCancelled)
+        #expect(owner.placements[original.id]?.space == 10)
+        #expect(owner.workspaces[10]?.windows == [original.id, sibling])
+    }
+
+    @MainActor @Test func ownerDeallocationDoesNotRetainDepartingWork() async throws {
+        var (owner, original): (Coordinator?, Window) = fixture()
+        owner!.track(inactiveTab(original))
+        let release = try #require(owner!.departingTabs[original.id])
+        weak var weakOwner = owner
+        owner = nil
+        #expect(weakOwner == nil)
+        await waitForRelease(release)
+        #expect(weakOwner == nil)
+    }
 }
